@@ -22,30 +22,53 @@ import { Progress } from "@/components/ui/progress";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SessionProvider } from "next-auth/react";
+import { SessionProvider, useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
-export default function OnBoard() {
+function OnBoardContent() {
   const router = useRouter();
+  const { update } = useSession();
   const [api, setApi] = useState<CarouselApi>();
   const [, setCount] = useState(0);
   const [current, setCurrent] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const progress = (current - 1) * 33.33;
 
   async function finish() {
-    const res = await fetch("/api/profile/completed", { method: "POST" });
+    setIsSubmitting(true);
 
-    if (!res.ok) {
-      toast.error("Could not complete onboarding. Try again.");
-      return;
+    try {
+      const res = await fetch("/api/profile/completed", { method: "POST" });
+
+      if (!res.ok) {
+        toast.error("Could not complete onboarding. Try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Refresh session to update JWT token with profileCompleted: true
+      try {
+        await update();
+      } catch (error) {
+        // Retry once if session update fails
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await update();
+      }
+
+      toast.success("Onboarding complete!", {
+        description:
+          "Your profile is now set up. You're all set to get started — welcome aboard! 🚀",
+      });
+
+      // Hard navigation to ensure fresh page load with updated session
+      setTimeout(() => {
+        window.location.href = "/feed";
+      }, 500);
+    } catch (error) {
+      toast.error("Something went wrong. Please try again.");
+      setIsSubmitting(false);
     }
-
-    toast.success("Onboarding complete!", {
-      description:
-        "Your profile is now set up. You’re all set to get started — welcome aboard! 🚀",
-    });
-
-    router.push("/feed");
   }
 
   useEffect(() => {
@@ -58,7 +81,7 @@ export default function OnBoard() {
   }, [api]);
 
   return (
-    <SessionProvider>
+    <>
       <div className="flex h-full items-center">
         <Carousel
           opts={{ watchDrag: false, watchResize: true }}
@@ -114,8 +137,12 @@ export default function OnBoard() {
                   <SetupExperience />
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
-                  <Button className="w-full" onClick={finish}>
-                    Finish Onboarding
+                  <Button 
+                    className="w-full" 
+                    onClick={finish}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Finishing..." : "Finish Onboarding"}
                   </Button>
                 </CardFooter>
               </CarouselItem>
@@ -123,6 +150,22 @@ export default function OnBoard() {
           </Card>
         </Carousel>
       </div>
+``      {isSubmitting && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-white" />
+            <p className="text-white">Completing your profile...</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function OnBoard() {
+  return (
+    <SessionProvider>
+      <OnBoardContent />
     </SessionProvider>
   );
 }
