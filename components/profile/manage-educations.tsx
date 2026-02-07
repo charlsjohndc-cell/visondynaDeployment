@@ -262,16 +262,16 @@ export default function ManageEducations({
               key={ed.id}
               className="flex items-start justify-between gap-4 pt-4"
             >
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="w-full font-medium tracking-tight">{ed.course}</p>                <p className="text-sm text-slate-400">{ed.institution}</p>                <p className="mt-1 text-xs text-slate-500">
                   {fmt(ed.enrolledDate)}{" "}
                   {ed.graduationDate ? `• ${fmt(ed.graduationDate)}` : ""}
                 </p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-400 whitespace-nowrap">
                   {ed.graduated ? "Graduated" : "Not yet graduated"}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-shrink-0">
                 <Button size="sm" variant="ghost" onClick={() => openEdit(ed)}>
                   Edit
                 </Button>
