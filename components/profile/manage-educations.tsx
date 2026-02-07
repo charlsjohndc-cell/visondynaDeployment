@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 type Education = {
   id: string;
   course: string;
+  institution: string;
   graduated: boolean;
   enrolledDate: Date | string | null;
   graduationDate: Date | string | null;
@@ -34,8 +35,9 @@ type Education = {
 
 const schema = z.object({
   course: z.string().min(2, "Course is required"),
+  institution: z.string().min(2, "Institution is required"),
   graduated: z.boolean(),
-  enrolledDate: z.string().optional(), // "YYYY-MM-DD"
+  enrolledDate: z.string().min(1, "Enrolled date is required"), // "YYYY-MM-DD"
   graduationDate: z.string().optional(), // "YYYY-MM-DD"
 });
 
@@ -58,10 +60,11 @@ export default function ManageEducations({
 
   const [form, setForm] = useState<{
     course: string;
+    institution: string;
     graduated: boolean;
-    enrolledDate?: string;
+    enrolledDate: string;
     graduationDate?: string;
-  }>({ course: "", graduated: false });
+  }>({ course: "", institution: "", enrolledDate: "", graduated: false });
 
   const dialogTitle = useMemo(
     () => (editingId ? "Edit education" : "Add education"),
@@ -70,7 +73,7 @@ export default function ManageEducations({
 
   function openAdd() {
     setEditingId(null);
-    setForm({ course: "", graduated: false });
+    setForm({ course: "", institution: "", enrolledDate: "", graduated: false });
     setOpen(true);
   }
 
@@ -78,6 +81,7 @@ export default function ManageEducations({
     setEditingId(x.id);
     setForm({
       course: x.course,
+      institution: x.institution,
       graduated: Boolean(x.graduated),
       enrolledDate: x.enrolledDate
         ? new Date(x.enrolledDate).toISOString().slice(0, 10)
@@ -95,10 +99,9 @@ export default function ManageEducations({
 
     const payload = {
       course: parsed.data.course.trim(),
+      institution: parsed.data.institution.trim(),
       graduated: parsed.data.graduated,
-      enrolledDate: parsed.data.enrolledDate
-        ? new Date(`${parsed.data.enrolledDate}T00:00:00.000Z`).toISOString()
-        : undefined,
+      enrolledDate: new Date(`${parsed.data.enrolledDate}T00:00:00.000Z`).toISOString(),
       graduationDate: parsed.data.graduationDate
         ? new Date(`${parsed.data.graduationDate}T00:00:00.000Z`).toISOString()
         : undefined,
@@ -188,20 +191,36 @@ export default function ManageEducations({
                 />
               </div>
 
+              <div>
+                <Label htmlFor="institution">Institution / School</Label>
+                <Input
+                  id="institution"
+                  value={form.institution}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, institution: e.target.value }))
+                  }
+                  placeholder="e.g., University of Example"
+                />
+              </div>
+
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="graduated"
                   checked={form.graduated}
                   onCheckedChange={(v) =>
-                    setForm((f) => ({ ...f, graduated: Boolean(v) }))
+                    setForm((f) => ({ 
+                      ...f, 
+                      graduated: Boolean(v),
+                      graduationDate: v ? f.graduationDate : undefined
+                    }))
                   }
                 />
                 <Label htmlFor="graduated">Graduated</Label>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className={form.graduated ? "grid grid-cols-2 gap-3" : ""}>
                 <div>
-                  <Label htmlFor="enrolledDate">Enrolled</Label>
+                  <Label htmlFor="enrolledDate">Enrolled Date</Label>
                   <Input
                     id="enrolledDate"
                     type="date"
@@ -211,17 +230,19 @@ export default function ManageEducations({
                     }
                   />
                 </div>
-                <div>
-                  <Label htmlFor="graduationDate">Graduation</Label>
-                  <Input
-                    id="graduationDate"
-                    type="date"
-                    value={form.graduationDate ?? ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, graduationDate: e.target.value }))
-                    }
-                  />
-                </div>
+                {form.graduated && (
+                  <div>
+                    <Label htmlFor="graduationDate">Graduation Date</Label>
+                    <Input
+                      id="graduationDate"
+                      type="date"
+                      value={form.graduationDate ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, graduationDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -242,8 +263,7 @@ export default function ManageEducations({
               className="flex items-start justify-between gap-4 pt-4"
             >
               <div>
-                <p className="w-full font-medium tracking-tight">{ed.course}</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="w-full font-medium tracking-tight">{ed.course}</p>                <p className="text-sm text-slate-400">{ed.institution}</p>                <p className="mt-1 text-xs text-slate-500">
                   {fmt(ed.enrolledDate)}{" "}
                   {ed.graduationDate ? `• ${fmt(ed.graduationDate)}` : ""}
                 </p>
