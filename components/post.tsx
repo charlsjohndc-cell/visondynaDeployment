@@ -125,8 +125,9 @@ export default function Post({ post }: { post: Post }) {
         )}
       </CardContent>
 
-      <CardFooter className="grid grid-cols-3 gap-2 border-t p-2 dark:border-slate-800">
-        <Button
+      <CardFooter className="flex justify-center border-t p-2 dark:border-slate-800">
+        {/* Removed buttons for Dismiss and Save as per request by client */}
+        {/* <Button 
           variant="ghost"
           className="flex items-center gap-2 text-slate-400 dark:hover:bg-slate-900"
         >
@@ -140,8 +141,7 @@ export default function Post({ post }: { post: Post }) {
         >
           <Bookmark size={20} />
           <span>Save</span>
-        </Button>
-
+        </Button> */}
         <Button
           variant="ghost"
           className="flex items-center gap-2 text-slate-400 dark:hover:bg-slate-900"
