@@ -30,8 +30,9 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { toTitleCase } from "@/lib/utils";
 
-type UserRole = "ADMIN" | "HR";
+type UserRole = "ADMIN" | "HR" | "APPLICANT";
 
 type RawAdminUser = {
   id: string;
@@ -65,6 +66,7 @@ type UsersResponse = {
 };
 
 type StatusFilter = "ALL" | "ACTIVE" | "SUSPENDED";
+type RoleFilter = "ALL" | "ADMIN" | "HR" | "APPLICANT";
 
 const ENDPOINT = "/api/admin/users";
 
@@ -73,6 +75,7 @@ export default function AdminUsersTable() {
   const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [role, setRole] = useState<RoleFilter>("ALL");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
@@ -96,8 +99,9 @@ export default function AdminUsersTable() {
     params.set("limit", String(limit));
     if (q) params.set("q", q);
     if (status !== "ALL") params.set("status", status);
+    if (role !== "ALL") params.set("role", role);
     return params.toString();
-  }, [page, limit, q, status]);
+  }, [page, limit, q, status, role]);
 
   async function refreshUsers() {
     try {
@@ -168,6 +172,24 @@ export default function AdminUsersTable() {
         className={`px-2 py-0.5 text-xs ${classes} font-normal`}
       >
         {label}
+      </Badge>
+    );
+  }
+
+  function roleBadge(role: UserRole) {
+    const classes =
+      role === "ADMIN"
+        ? "border-purple-500/60 text-purple-300"
+        : role === "HR"
+          ? "border-amber-500/60 text-amber-300"
+          : "border-cyan-500/60 text-cyan-300";
+
+    return (
+      <Badge
+        variant="outline"
+        className={`px-2 py-0.5 text-xs ${classes} font-normal`}
+      >
+        {toTitleCase(role)}
       </Badge>
     );
   }
@@ -243,7 +265,7 @@ export default function AdminUsersTable() {
       <div className="space-y-6 animate-in fade-in">
         <h1 className="text-lg font-semibold">User Management</h1>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <SearchInput
             value={qInput}
             onChange={setQInput}
@@ -252,7 +274,7 @@ export default function AdminUsersTable() {
             placeholder="Search users…"
           />
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ToggleGroup
               type="single"
               value={status}
@@ -283,6 +305,50 @@ export default function AdminUsersTable() {
               </ToggleGroupItem>
             </ToggleGroup>
 
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  {role === "ALL" ? "All Roles" : toTitleCase(role)}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuLabel>Filter by Role</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRole("ALL");
+                    setPage(1);
+                  }}
+                >
+                  All Roles
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRole("ADMIN");
+                    setPage(1);
+                  }}
+                >
+                  Admin
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRole("HR");
+                    setPage(1);
+                  }}
+                >
+                  HR
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRole("APPLICANT");
+                    setPage(1);
+                  }}
+                >
+                  Applicant
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <SheetTrigger asChild>
               <Button className="flex items-center bg-lime-500 text-white">
                 <Plus className="size-4" />
@@ -308,7 +374,6 @@ export default function AdminUsersTable() {
 
               <TableBody>
                 {isLoading ? (
-                  // skeleton rows
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={`skeleton-${i}`}>
                       <TableCell className="px-4 py-3">
@@ -369,7 +434,7 @@ export default function AdminUsersTable() {
                         </TableCell>
 
                         <TableCell className="px-4 py-2 align-middle dark:text-slate-300">
-                          {user.role}
+                          {roleBadge(user.role)}
                         </TableCell>
 
                         <TableCell className="px-4 py-2 align-middle dark:text-slate-300">

@@ -97,7 +97,8 @@ export type ApplicationRow = {
     | "INTERVIEWED"
     | "OFFERED"
     | "HIRED"
-    | "REJECTED";
+    | "REJECTED"
+    | "WITHDRAWN";
   submittedAt: string;
   job: { id: string; title: string; company: string; location: string } | null;
   applicant: { id: string; name: string; email: string };

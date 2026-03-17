@@ -13,11 +13,11 @@ const updateAdminUserSchema = z.object({
   firstname: z.string().min(1).optional(),
   lastname: z.string().min(1).optional(),
   email: z.string().email().optional(),
-  role: z.enum(["ADMIN", "HR"]).optional(),
-  birthDate: z.string().min(1).optional(), // ISO string if provided
+  role: z.enum(["ADMIN", "HR", "APPLICANT"]).optional(),
+  birthDate: z.string().min(1).optional(),
   gender: z.string().min(1).optional(),
   isSuspended: z.boolean().optional(),
-  password: z.string().min(6).optional(), // if you allow password change
+  password: z.string().min(6).optional(),
 });
 
 type RouteParams = {
@@ -53,7 +53,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (data.isSuspended !== undefined)
       updateData.isSuspended = data.isSuspended;
     if (data.password !== undefined) {
-      // TODO: hash this before saving in real code
       updateData.password = data.password;
     }
     if (data.birthDate !== undefined) {
@@ -84,7 +83,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   } catch (err: unknown) {
     if (err instanceof PrismaClientKnownRequestError) {
       if (err.code === "P2002") {
-        // e.g. email already in use
         return conflict("Email already exists", err.meta);
       }
       return serverError(err);
@@ -104,7 +102,6 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
 
     const { id } = params;
 
-    // Soft delete admin/HR user
     const deleted = await prisma.user.update({
       where: { id },
       data: {

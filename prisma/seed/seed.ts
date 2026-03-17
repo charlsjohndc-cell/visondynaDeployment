@@ -3,7 +3,7 @@
  *
  * Full-featured seed for Visondyna Job Board
  * - Wipes data in FK-safe order
- * - Seeds Categories + SkillTags
+ * - Seeds Categories + SkillTags aligned to local market coverage
  * - Seeds Users (ADMIN, HR, APPLICANT) with hashed passwords
  * - Seeds Profiles (+ Education, Experience, ApplicantSkillTags)
  * - Seeds Jobs (with postedBy HR, Category, and JobSkillTags)
@@ -17,27 +17,33 @@
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import prisma from "@/lib/prisma"; // adjust if your prisma client path differs
+import prisma from "@/lib/prisma";
 
 // ------------------------- Tunables -------------------------
-const N_APPLICANTS = 50;
-const N_HR = 6;
-const N_ADMINS = 2;
-const N_JOBS = 100;
+// ------------------------- Tunables -------------------------
+const N_APPLICANTS = 5;
+const N_HR = 1;
+const N_ADMINS = 1;
+const N_JOBS = 5;
 
-const MAX_EDUCATIONS_PER_PROFILE = 3;
-const MAX_EXPERIENCES_PER_PROFILE = 4;
-const MAX_SKILLS_PER_PROFILE = 8;
+const MAX_EDUCATIONS_PER_PROFILE = 1;
+const MAX_EXPERIENCES_PER_PROFILE = 1;
+const MAX_SKILLS_PER_PROFILE = 3;
 
-const MAX_APPLICATIONS_PER_USER = 8;
-const FRACTION_APPLICANTS_WITH_CONVO = 0.5; // ~50% have 1 conversation
+const MAX_APPLICATIONS_PER_USER = 2;
+const FRACTION_APPLICANTS_WITH_CONVO = 0.2;
 
 const DEFAULT_PASSWORD = process.env.SEED_PASSWORD || "password123";
 const BCRYPT_ROUNDS = 10;
 
 // Job skill linking
-const MIN_JOB_SKILLS = 3;
-const MAX_JOB_SKILLS = 6;
+const MIN_JOB_SKILLS = 1;
+const MAX_JOB_SKILLS = 2;
+
+// Fixed known accounts
+const FIXED_ADMIN_EMAIL = "admin@visondyna.local";
+const FIXED_HR_EMAIL = "hr@visondyna.local";
+const FIXED_APPLICANT_EMAIL = "applicant@visondyna.local";
 
 // ------------------------- Data Pools -------------------------
 const FIRST_NAMES = [
@@ -62,6 +68,7 @@ const FIRST_NAMES = [
   "Mia",
   "Daniel",
 ];
+
 const LAST_NAMES = [
   "Dela Cruz",
   "Santos",
@@ -84,6 +91,7 @@ const LAST_NAMES = [
   "Gonzales",
   "Flores",
 ];
+
 const COMPANIES = [
   "Visondyna",
   "MetroCorp",
@@ -96,6 +104,7 @@ const COMPANIES = [
   "NextWave",
   "HarborWorks",
 ];
+
 const LOCATIONS = [
   "West Aeropark, Clark Freeport Zone",
   "Clark Freeport Zone, Pampanga",
@@ -108,25 +117,88 @@ const LOCATIONS = [
   "San Fernando City, Pampanga",
   "Porac, Pampanga",
 ];
-const JOB_TITLES = [
-  "General Laborer",
-  "Warehouse Assistant",
-  "Front Desk Associate",
-  "Housekeeping Attendant",
-  "Food Service Crew",
-  "Customer Service Representative",
-  "Data Entry Clerk",
-  "Junior Frontend Developer",
-  "Maintenance Technician",
-  "Security Guard",
-  "Administrative Assistant",
-  "Barista",
-  "Delivery Rider",
-  "Retail Sales Associate",
-  "Logistics Coordinator",
-  "Landscape Crew Member",
-  "Forklift Operator",
+
+// Local market-aligned categories + skills
+const categorySeeds: Array<{ name: string; skills: string[] }> = [
+  {
+    name: "Cleaning & Maintenance Services",
+    skills: [
+      "Facility and Maintenance Services",
+      "Janitorial",
+      "Utility Services",
+      "Housekeeping",
+      "Gardening and Groundskeeping",
+    ],
+  },
+  {
+    name: "Industrial & Skilled Labor",
+    skills: ["Production Workers", "Skilled Labor", "General Labor"],
+  },
+  {
+    name: "Clerical & Office Support",
+    skills: [
+      "Administrative Assistants",
+      "Clerical Staff",
+      "Office Support Personnel",
+    ],
+  },
+  {
+    name: "Hospitality & Guest Services",
+    skills: [
+      "Front Desk Personnel",
+      "Food and Beverage Crew",
+      "Hotel and Resort Staff",
+      "Room Attendants",
+    ],
+  },
+  {
+    name: "Retail & Event Staffing",
+    skills: ["Event Crew", "Retail Staff"],
+  },
 ];
+
+const JOB_TITLES_BY_CATEGORY: Record<string, string[]> = {
+  "Cleaning & Maintenance Services": [
+    "Janitor",
+    "Housekeeping Staff",
+    "Utility Worker",
+    "Maintenance Assistant",
+    "Groundskeeping Staff",
+    "Facility Cleaner",
+  ],
+  "Industrial & Skilled Labor": [
+    "Production Worker",
+    "General Laborer",
+    "Skilled Worker",
+    "Warehouse Assistant",
+    "Forklift Operator",
+    "Maintenance Technician",
+  ],
+  "Clerical & Office Support": [
+    "Administrative Assistant",
+    "Office Clerk",
+    "Data Entry Clerk",
+    "Office Support Staff",
+    "Clerical Assistant",
+  ],
+  "Hospitality & Guest Services": [
+    "Front Desk Associate",
+    "Food Service Crew",
+    "Hotel Staff",
+    "Room Attendant",
+    "Guest Service Assistant",
+    "Restaurant Service Crew",
+  ],
+  "Retail & Event Staffing": [
+    "Retail Sales Associate",
+    "Store Staff",
+    "Event Crew Member",
+    "Promotional Staff",
+    "Cashier",
+  ],
+};
+
+const ALL_LOCAL_JOB_TITLES = Object.values(JOB_TITLES_BY_CATEGORY).flat();
 
 const ROLE_SUMMARY_SNIPPETS = [
   "Support daily operations to maintain service quality and safety standards.",
@@ -155,135 +227,55 @@ const QUALIFICATION_SNIPPETS = [
   "Good communication and teamwork skills.",
 ];
 
-// Categories + skills aligned to your schema
-const categorySeeds: Array<{ name: string; skills: string[] }> = [
-  {
-    name: "janitorial",
-    skills: [
-      "Sweeping",
-      "Mopping",
-      "Vacuuming",
-      "Floor Care",
-      "Window Cleaning",
-      "Restroom Sanitation",
-      "Trash Collection",
-      "Disinfection Protocols",
-      "PPE Usage",
-    ],
-  },
-  {
-    name: "hospitality",
-    skills: [
-      "Front Desk Operations",
-      "Reservation Systems Basics",
-      "POS Operation",
-      "Concierge Service",
-      "Guest Relations",
-      "Banquet Setup",
-      "Food Safety (HACCP Basics)",
-    ],
-  },
-  {
-    name: "utility",
-    skills: [
-      "General Maintenance",
-      "Basic Electrical",
-      "Basic Plumbing",
-      "Carpentry Basics",
-      "Painting",
-      "Groundskeeping",
-      "Preventive Maintenance",
-    ],
-  },
-  {
-    name: "clerical",
-    skills: [
-      "Data Entry",
-      "Typing",
-      "Microsoft Word",
-      "Microsoft Excel",
-      "Google Workspace",
-      "Email Etiquette",
-      "Phone Handling",
-    ],
-  },
-  {
-    name: "skilled and general labor",
-    skills: [
-      "Construction Basics",
-      "Site Safety",
-      "Masonry",
-      "Carpentry",
-      "Tiling",
-      "Painting",
-      "Forklift Operation",
-    ],
-  },
-  {
-    name: "gardening",
-    skills: [
-      "Plant Identification",
-      "Pruning",
-      "Weeding",
-      "Mulching",
-      "Soil Preparation",
-      "Lawn Care",
-      "Irrigation Systems",
-    ],
-  },
-  {
-    name: "administrative and office support",
-    skills: [
-      "Office Administration",
-      "Calendar & Travel Management",
-      "Document Control",
-      "Report Preparation",
-      "Excel (Pivot Tables)",
-      "HRIS Basics",
-    ],
-  },
-];
-
 // ------------------------- Utils -------------------------
 function rand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
+
 function randN(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
+
 function pickUnique<T>(arr: T[], n: number): T[] {
   const copy = [...arr];
   const out: T[] = [];
+
   while (copy.length && out.length < n) {
     const i = Math.floor(Math.random() * copy.length);
     out.push(copy.splice(i, 1)[0]);
   }
+
   return out;
 }
+
 function uniqueEmail(first: string, last: string, idx: number) {
   const safeFirst = first.toLowerCase().replace(/\s+/g, "");
   const safeLast = last.toLowerCase().replace(/\s+/g, "");
   return `${safeFirst}.${safeLast}+${idx}@example.com`;
 }
+
 function randomDateBetweenYearsAgo(minYearsAgo = 20, maxYearsAgo = 40) {
   const now = Date.now();
   const yearsAgo = minYearsAgo + Math.random() * (maxYearsAgo - minYearsAgo);
   const ts = now - yearsAgo * 365 * 24 * 60 * 60 * 1000;
   return new Date(ts);
 }
+
 function phonePH(): string {
   return `+63 9${Math.floor(100000000 + Math.random() * 900000000)}`;
 }
-function randomTitle(): string {
-  const title = rand(JOB_TITLES);
+
+function randomTitle(categoryName: string): string {
+  const titles = JOB_TITLES_BY_CATEGORY[categoryName] ?? ["General Worker"];
+  const title = rand(titles);
   const suffix =
     Math.random() > 0.8
       ? ` (${["Part-time", "Full-time", "Contract"][Math.floor(Math.random() * 3)]})`
       : "";
+
   return `${title}${suffix}`;
 }
 
-// Multi-section job description (clean multiline text)
 function buildJobDescription(title: string, company: string): string {
   const summary = pickUnique(ROLE_SUMMARY_SNIPPETS, randN(2, 3)).join(" ");
   const responsibilities = pickUnique(RESPONSIBILITY_SNIPPETS, randN(4, 6))
@@ -308,7 +300,6 @@ function buildJobDescription(title: string, company: string): string {
 }
 
 async function hashTokenForDB(token: string): Promise<string> {
-  // Your schema expects tokenHash (unique). We'll hash the token.
   return bcrypt.hash(token, BCRYPT_ROUNDS);
 }
 
@@ -321,7 +312,9 @@ async function main() {
   await prisma.message.deleteMany({});
   await prisma.conversation.deleteMany({});
 
+  await prisma.notification.deleteMany({});
   await prisma.application.deleteMany({});
+  await prisma.savedJob.deleteMany({});
   await prisma.jobSkillTag.deleteMany({});
   await prisma.experience.deleteMany({});
   await prisma.education.deleteMany({});
@@ -329,14 +322,25 @@ async function main() {
   await prisma.profile.deleteMany({});
   await prisma.emailVerificationToken.deleteMany({});
   await prisma.job.deleteMany({});
-  // wipe only APPLICANT / HR / ADMIN users, so re-seed cleanly
-  await prisma.user.deleteMany({});
+  await prisma.user.deleteMany({
+    where: {
+      OR: [
+        { email: { endsWith: "@example.com" } },
+        { email: { endsWith: "@admin.example.com" } },
+        { email: { endsWith: "@hr.example.com" } },
+        { email: FIXED_ADMIN_EMAIL },
+        { email: FIXED_HR_EMAIL },
+        { email: FIXED_APPLICANT_EMAIL },
+      ],
+    },
+  });
   await prisma.skillTag.deleteMany({});
   await prisma.category.deleteMany({});
 
   // ---------- 1) Seed Categories + SkillTags ----------
   console.info("Seeding categories + skill tags...");
-  const categories = [];
+  const categories: { id: string; name: string }[] = [];
+
   for (const cat of categorySeeds) {
     const created = await prisma.category.create({
       data: {
@@ -347,20 +351,117 @@ async function main() {
       },
       select: { id: true, name: true },
     });
+
     categories.push(created);
   }
+
   const allSkillTags = await prisma.skillTag.findMany({
     select: { id: true, name: true, categoryId: true },
   });
+
   console.info(
     `  Categories: ${categories.length}, SkillTags: ${allSkillTags.length}`,
   );
 
-  // ---------- 2) Seed Users (Admins, HR, Applicants) ----------
+  // ---------- 2) Seed Users ----------
   console.info("Seeding users...");
   const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_ROUNDS);
 
-  const admins = [];
+  // Fixed known accounts
+  const fixedAdmin = await prisma.user.upsert({
+    where: { email: FIXED_ADMIN_EMAIL },
+    update: {
+      firstname: "System",
+      lastname: "Admin",
+      password: hashedPassword,
+      role: "ADMIN",
+      gender: "male",
+      birthDate: new Date("1998-01-01"),
+      emailVerified: new Date(),
+      deletedAt: null,
+      isSuspended: false,
+    },
+    create: {
+      firstname: "System",
+      lastname: "Admin",
+      email: FIXED_ADMIN_EMAIL,
+      password: hashedPassword,
+      role: "ADMIN",
+      gender: "male",
+      birthDate: new Date("1998-01-01"),
+      emailVerified: new Date(),
+      isSuspended: false,
+    },
+    select: { id: true, email: true },
+  });
+
+  const fixedHr = await prisma.user.upsert({
+    where: { email: FIXED_HR_EMAIL },
+    update: {
+      firstname: "Default",
+      lastname: "HR",
+      password: hashedPassword,
+      role: "HR",
+      gender: "female",
+      birthDate: new Date("1999-01-01"),
+      emailVerified: new Date(),
+      deletedAt: null,
+      isSuspended: false,
+    },
+    create: {
+      firstname: "Default",
+      lastname: "HR",
+      email: FIXED_HR_EMAIL,
+      password: hashedPassword,
+      role: "HR",
+      gender: "female",
+      birthDate: new Date("1999-01-01"),
+      emailVerified: new Date(),
+      isSuspended: false,
+    },
+    select: { id: true, email: true },
+  });
+
+  const fixedApplicantUser = await prisma.user.upsert({
+    where: { email: FIXED_APPLICANT_EMAIL },
+    update: {
+      firstname: "Test",
+      lastname: "Applicant",
+      password: hashedPassword,
+      role: "APPLICANT",
+      gender: "male",
+      birthDate: new Date("2000-01-01"),
+      emailVerified: new Date(),
+      deletedAt: null,
+      isSuspended: false,
+    },
+    create: {
+      firstname: "Test",
+      lastname: "Applicant",
+      email: FIXED_APPLICANT_EMAIL,
+      password: hashedPassword,
+      role: "APPLICANT",
+      gender: "male",
+      birthDate: new Date("2000-01-01"),
+      emailVerified: new Date(),
+      isSuspended: false,
+    },
+    select: { id: true },
+  });
+
+  const fixedApplicantProfile = await prisma.profile.create({
+    data: {
+      userId: fixedApplicantUser.id,
+      profession: "General Worker",
+      phone: phonePH(),
+      profileSummary:
+        "Motivated applicant with strong teamwork skills and willingness to learn.",
+      profileCompleted: true,
+    },
+    select: { id: true },
+  });
+
+  const admins: { id: string; email: string }[] = [fixedAdmin];
   for (let i = 0; i < N_ADMINS; i++) {
     const first = rand(FIRST_NAMES);
     const last = rand(LAST_NAMES);
@@ -368,8 +469,21 @@ async function main() {
       "@example.com",
       "@admin.example.com",
     );
-    const user = await prisma.user.create({
-      data: {
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {
+        firstname: first,
+        lastname: last,
+        password: hashedPassword,
+        role: "ADMIN",
+        gender: Math.random() > 0.5 ? "male" : "female",
+        birthDate: randomDateBetweenYearsAgo(28, 45),
+        emailVerified: new Date(),
+        deletedAt: null,
+        isSuspended: false,
+      },
+      create: {
         firstname: first,
         lastname: last,
         email,
@@ -378,13 +492,15 @@ async function main() {
         gender: Math.random() > 0.5 ? "male" : "female",
         birthDate: randomDateBetweenYearsAgo(28, 45),
         emailVerified: new Date(),
+        isSuspended: false,
       },
       select: { id: true, email: true },
     });
+
     admins.push(user);
   }
 
-  const hrs = [];
+  const hrs: { id: string; email: string }[] = [fixedHr];
   for (let i = 0; i < N_HR; i++) {
     const first = rand(FIRST_NAMES);
     const last = rand(LAST_NAMES);
@@ -392,8 +508,21 @@ async function main() {
       "@example.com",
       "@hr.example.com",
     );
-    const user = await prisma.user.create({
-      data: {
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {
+        firstname: first,
+        lastname: last,
+        password: hashedPassword,
+        role: "HR",
+        gender: Math.random() > 0.5 ? "male" : "female",
+        birthDate: randomDateBetweenYearsAgo(24, 40),
+        emailVerified: new Date(),
+        deletedAt: null,
+        isSuspended: false,
+      },
+      create: {
         firstname: first,
         lastname: last,
         email,
@@ -402,17 +531,23 @@ async function main() {
         gender: Math.random() > 0.5 ? "male" : "female",
         birthDate: randomDateBetweenYearsAgo(24, 40),
         emailVerified: new Date(),
+        isSuspended: false,
       },
       select: { id: true, email: true },
     });
+
     hrs.push(user);
   }
 
-  const applicants: { id: string; profileId: string }[] = [];
+  const applicants: { id: string; profileId: string }[] = [
+    { id: fixedApplicantUser.id, profileId: fixedApplicantProfile.id },
+  ];
+
   for (let i = 0; i < N_APPLICANTS; i++) {
     const first = rand(FIRST_NAMES);
     const last = rand(LAST_NAMES);
     const email = uniqueEmail(first, last, i + 1);
+
     const user = await prisma.user.create({
       data: {
         firstname: first,
@@ -427,33 +562,31 @@ async function main() {
       select: { id: true },
     });
 
-    // Optional: create EmailVerificationToken for some users
-    if (!user) continue;
     if (Math.random() > 0.7) {
       const tokenRaw = crypto.randomBytes(24).toString("hex");
       const tokenHash = await hashTokenForDB(tokenRaw);
+
       await prisma.emailVerificationToken.create({
         data: {
           userId: user.id,
           tokenHash,
-          expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3), // +3 days
+          expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3),
         },
       });
     }
 
-    // Profile
     const profile = await prisma.profile.create({
       data: {
         userId: user.id,
-        profession: Math.random() > 0.4 ? rand(JOB_TITLES) : "General Worker",
+        profession:
+          Math.random() > 0.4 ? rand(ALL_LOCAL_JOB_TITLES) : "General Worker",
         phone: phonePH(),
-        profileSummary: `Motivated ${rand(JOB_TITLES)} with strong teamwork skills. ${rand(ROLE_SUMMARY_SNIPPETS)}`,
+        profileSummary: `Motivated ${rand(ALL_LOCAL_JOB_TITLES)} with strong teamwork skills. ${rand(ROLE_SUMMARY_SNIPPETS)}`,
         profileCompleted: Math.random() > 0.3,
       },
       select: { id: true },
     });
 
-    // Education(s)
     const eduCount = randN(0, MAX_EDUCATIONS_PER_PROFILE);
     for (let e = 0; e < eduCount; e++) {
       const enrolled = new Date(
@@ -462,6 +595,7 @@ async function main() {
       const grad = new Date(
         enrolled.getTime() + randN(2, 5) * 365 * 24 * 60 * 60 * 1000,
       );
+
       await prisma.education.create({
         data: {
           course: rand([
@@ -486,7 +620,6 @@ async function main() {
       });
     }
 
-    // Experience(s)
     const expCount = randN(0, MAX_EXPERIENCES_PER_PROFILE);
     for (let ex = 0; ex < expCount; ex++) {
       const start = new Date(
@@ -496,9 +629,10 @@ async function main() {
         Math.random() > 0.4
           ? new Date(start.getTime() + randN(6, 36) * 30 * 24 * 60 * 60 * 1000)
           : null;
+
       await prisma.experience.create({
         data: {
-          job: rand(JOB_TITLES),
+          job: rand(ALL_LOCAL_JOB_TITLES),
           company: rand(COMPANIES),
           startDate: start,
           lastAttended: end ?? undefined,
@@ -507,7 +641,6 @@ async function main() {
       });
     }
 
-    // Applicant skills (link table)
     const skillCount = randN(
       0,
       Math.min(MAX_SKILLS_PER_PROFILE, allSkillTags.length),
@@ -516,6 +649,7 @@ async function main() {
       allSkillTags.map((s) => s.id),
       skillCount,
     );
+
     if (chosenSkillIds.length) {
       await prisma.applicantSkillTag.createMany({
         data: chosenSkillIds.map((skillId) => ({
@@ -527,20 +661,24 @@ async function main() {
     }
 
     applicants.push({ id: user.id, profileId: profile.id });
-    if ((i + 1) % 10 === 0) console.info(`  - Applicants created: ${i + 1}`);
+
+    if ((i + 1) % 10 === 0) {
+      console.info(`  - Applicants created: ${i + 1}`);
+    }
   }
 
-  // ---------- 3) Seed Jobs (with category, postedBy HR, JobSkillTags) ----------
+  // ---------- 3) Seed Jobs ----------
   console.info(`Seeding ${N_JOBS} jobs...`);
   const jobIds: string[] = [];
+
   for (let i = 0; i < N_JOBS; i++) {
-    const title = randomTitle();
+    const category = rand(categories);
+    const title = randomTitle(category.name);
     const location = rand(LOCATIONS);
     const company = rand(COMPANIES);
-    const salary = Math.round(12000 + Math.random() * 28000); // PHP monthly approx
+    const salary = Math.round(12000 + Math.random() * 28000);
     const manpower = randN(1, 40);
-    const category = rand(categories);
-    const poster = rand(hrs.length ? hrs : admins); // fallback to admin if no HR
+    const poster = rand(hrs.length ? hrs : admins);
 
     const description = buildJobDescription(title, company);
 
@@ -558,30 +696,36 @@ async function main() {
       },
       select: { id: true, categoryId: true },
     });
+
     jobIds.push(job.id);
 
-    // --- NEW: Assign JobSkillTags (pick from this job's category skills) ---
     const categorySkills = allSkillTags.filter(
       (s) => s.categoryId === job.categoryId,
     );
+
     if (categorySkills.length) {
       const k = randN(
         MIN_JOB_SKILLS,
         Math.min(MAX_JOB_SKILLS, categorySkills.length),
       );
       const chosen = pickUnique(categorySkills, k);
+
       await prisma.jobSkillTag.createMany({
-        data: chosen.map((s) => ({ jobId: job.id, skillTagId: s.id })),
+        data: chosen.map((s) => ({
+          jobId: job.id,
+          skillTagId: s.id,
+        })),
         skipDuplicates: true,
       });
     }
 
-    if ((i + 1) % 20 === 0) console.info(`  - Jobs created: ${i + 1}`);
+    if ((i + 1) % 20 === 0) {
+      console.info(`  - Jobs created: ${i + 1}`);
+    }
   }
 
-  // ---------- 4) Seed Applications (unique per [applicantId, jobId]) ----------
+  // ---------- 4) Seed Applications ----------
   console.info("Seeding applications...");
-  let totalApplications = 0;
   for (let ui = 0; ui < applicants.length; ui++) {
     const applicant = applicants[ui];
     const appsCount = randN(
@@ -595,6 +739,7 @@ async function main() {
 
     for (const idx of chosenJobIdxs) {
       const jobId = jobIds[idx];
+
       await prisma.application.create({
         data: {
           jobId,
@@ -610,14 +755,13 @@ async function main() {
               { q: "Preferred shift", a: rand(["Day", "Night", "Flexible"]) },
             ],
           },
-          // status omitted -> DB default PENDING
         },
       });
-      totalApplications++;
     }
 
-    if ((ui + 1) % 10 === 0)
+    if ((ui + 1) % 10 === 0) {
       console.info(`  - Applications created for ${ui + 1} applicants`);
+    }
   }
 
   // ---------- 5) Seed Conversations + Messages ----------
@@ -636,6 +780,7 @@ async function main() {
       "Schedule Availability",
       "Document Submission",
     ]);
+
     const convo = await prisma.conversation.create({
       data: {
         applicantProfileId: applicant.profileId,
@@ -644,9 +789,9 @@ async function main() {
       },
       select: { id: true },
     });
+
     totalConvos++;
 
-    // 2–4 messages alternating roles
     const chainLen = randN(2, 4);
     const lastAt = Date.now() - chainLen * 60 * 1000;
 
@@ -655,9 +800,11 @@ async function main() {
       const senderRole = isApplicant
         ? ("APPLICANT" as const)
         : Math.random() > 0.5
-          ? "HR"
-          : "ADMIN";
+          ? ("HR" as const)
+          : ("ADMIN" as const);
+
       const staff = isApplicant ? null : rand(postersForMessaging);
+
       const content = isApplicant
         ? rand([
             "Hi, I want to check my application status. Thank you!",
@@ -680,8 +827,9 @@ async function main() {
           readAt: Math.random() > 0.6 ? new Date() : null,
         },
       });
+
       totalMessages++;
-      // keep conversation timestamp fresh
+
       await prisma.conversation.update({
         where: { id: convo.id },
         data: { lastMessageAt: msg.createdAt },
@@ -700,12 +848,17 @@ async function main() {
 
   console.info("==== SEED COMPLETE ====");
   console.info(
-    `  Users total: ${uCount}  (Admins: ${N_ADMINS}, HR: ${N_HR}, Applicants: ${N_APPLICANTS})`,
+    `  Users total: ${uCount} (Admins: ${N_ADMINS + 1}, HR: ${N_HR + 1}, Applicants: ${N_APPLICANTS + 1})`,
   );
   console.info(`  Jobs: ${jCount}`);
   console.info(`  Applications: ${aCount}`);
   console.info(`  Categories: ${cCount}, SkillTags: ${sCount}`);
   console.info(`  Conversations: ${totalConvos}, Messages: ${totalMessages}`);
+  console.info("");
+  console.info("Known login accounts:");
+  console.info(`  Admin: ${FIXED_ADMIN_EMAIL} / ${DEFAULT_PASSWORD}`);
+  console.info(`  HR: ${FIXED_HR_EMAIL} / ${DEFAULT_PASSWORD}`);
+  console.info(`  Applicant: ${FIXED_APPLICANT_EMAIL} / ${DEFAULT_PASSWORD}`);
 }
 
 main()

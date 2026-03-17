@@ -11,16 +11,17 @@ import {
 import {
   Send,
   Bookmark,
-  EyeOff,
   Banknote,
   MapPin,
   Users,
   Tag,
+  Clock3,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "./ui/badge";
 import { toTitleCase } from "@/lib/utils";
 import type { JobStatus } from "@prisma/client";
@@ -40,116 +41,188 @@ type Post = {
   category: { name: string };
 };
 
-const PREVIEW_LENGTH = 200;
+const PREVIEW_LENGTH = 220;
 
 export default function Post({ post }: { post: Post }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const isLong = post.description.length > PREVIEW_LENGTH;
   const preview = post.description.slice(0, PREVIEW_LENGTH);
 
+  useEffect(() => {
+    async function checkSaved() {
+      try {
+        const res = await fetch(`/api/jobs/saved-status?jobId=${post.id}`);
+        const data = await res.json();
+        setSaved(Boolean(data.saved));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    checkSaved();
+  }, [post.id]);
+
+  const handleToggleSave = async () => {
+    if (loading) return;
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/jobs/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: post.id }),
+      });
+
+      const data = await res.json();
+
+      if (typeof data.saved === "boolean") {
+        setSaved(data.saved);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader className="pb-0">
-        <CardTitle className="text-xl text-lime-500">{post.title}</CardTitle>
-        <CardDescription className="flex items-center gap-1 font-medium">
-          <span>{post.company}</span>
-          <span>|</span>
-          <span>
-            {formatDistanceToNowStrict(post.createdAt, { addSuffix: true })}
-          </span>
-        </CardDescription>
-        <div className="inline-flex flex-wrap items-center gap-2 pt-4">
-          <Badge
-            variant="outline"
-            className="inline-flex items-center gap-2 font-normal"
-          >
-            <Banknote className="size-4" />
-            <span>₱ {post.salary.toLocaleString()}</span>
-          </Badge>
-          <Badge
-            variant="outline"
-            className="inline-flex items-center gap-2 font-normal"
-          >
-            <MapPin className="size-4" />
-            <span>{post.location}</span>
-          </Badge>
-          <Badge
-            variant="outline"
-            className="inline-flex items-center gap-2 font-normal"
-          >
-            <Users className="size-4" />
-            <span>{post.manpower} slots available</span>
-          </Badge>
-          <Badge
-            variant="outline"
-            className="inline-flex items-center gap-2 font-normal"
-          >
-            <Tag className="size-4" />
-            <span>{toTitleCase(post.category.name)}</span>
-          </Badge>
+    <Card className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-950">
+      <CardHeader className="space-y-4 pb-3">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div>
+              <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                {post.title}
+              </CardTitle>
+
+              <CardDescription className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <Building2 className="size-4" />
+                  {post.company}
+                </span>
+                <span className="hidden text-slate-300 dark:text-slate-700 sm:inline">
+                  •
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock3 className="size-4" />
+                  {formatDistanceToNowStrict(post.createdAt, {
+                    addSuffix: true,
+                  })}
+                </span>
+              </CardDescription>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 font-normal text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <Banknote className="mr-1.5 size-4" />
+                ₱ {post.salary.toLocaleString()}
+              </Badge>
+
+              <Badge
+                variant="outline"
+                className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 font-normal text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <MapPin className="mr-1.5 size-4" />
+                {post.location}
+              </Badge>
+
+              <Badge
+                variant="outline"
+                className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 font-normal text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <Users className="mr-1.5 size-4" />
+                {post.manpower} slots
+              </Badge>
+
+              <Badge
+                variant="outline"
+                className="rounded-full border-lime-200 bg-lime-50 px-3 py-1 font-normal text-lime-700 dark:border-lime-900/50 dark:bg-lime-950/30 dark:text-lime-300"
+              >
+                <Tag className="mr-1.5 size-4" />
+                {toTitleCase(post.category.name)}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+            {toTitleCase(post.status)}
+          </div>
         </div>
       </CardHeader>
 
-      <CardContent className="p-6">
-        {!expanded ? (
-          <CardDescription className="break-words dark:text-slate-300">
-            {isLong ? (
-              <>
-                {preview}
-                {"... "}
-                <span
-                  onClick={() => setExpanded(true)}
-                  className="cursor-pointer hover:underline"
-                >
-                  see more
-                </span>
-              </>
-            ) : (
-              post.description
-            )}
-          </CardDescription>
-        ) : (
-          <>
-            <CardDescription className="whitespace-pre-line break-words dark:text-slate-300">
-              {post.description}{" "}
+      <CardContent className="pt-0">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+          {!expanded ? (
+            <CardDescription className="leading-7 text-slate-600 dark:text-slate-300">
+              {isLong ? (
+                <>
+                  {preview}
+                  {"... "}
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(true)}
+                    className="font-medium text-lime-600 hover:underline dark:text-lime-400"
+                  >
+                    See more
+                  </button>
+                </>
+              ) : (
+                post.description
+              )}
             </CardDescription>
-            <CardDescription
-              onClick={() => setExpanded(false)}
-              className="cursor-pointer hover:underline dark:text-slate-300"
-            >
-              see less
-            </CardDescription>
-          </>
-        )}
+          ) : (
+            <div className="space-y-2">
+              <CardDescription className="whitespace-pre-line leading-7 text-slate-600 dark:text-slate-300">
+                {post.description}
+              </CardDescription>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="text-sm font-medium text-lime-600 hover:underline dark:text-lime-400"
+              >
+                See less
+              </button>
+            </div>
+          )}
+        </div>
       </CardContent>
 
-      <CardFooter className="flex justify-center border-t p-2 dark:border-slate-800">
-        {/* Removed buttons for Dismiss and Save as per request by client */}
-        {/* <Button 
-          variant="ghost"
-          className="flex items-center gap-2 text-slate-400 dark:hover:bg-slate-900"
-        >
-          <EyeOff size={20} />
-          <span>Dismiss</span>
-        </Button>
+      <CardFooter className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Explore the job details or save it for later.
+        </div>
 
-        <Button
-          variant="ghost"
-          className="flex items-center gap-2 text-slate-400 dark:hover:bg-slate-900"
-        >
-          <Bookmark size={20} />
-          <span>Save</span>
-        </Button> */}
-        <Button
-          variant="ghost"
-          className="flex items-center gap-2 text-slate-400 dark:hover:bg-slate-900"
-          onClick={() => router.push(`/jobs/${post.id}`)}
-        >
-          <Send size={20} />
-          <span>Apply</span>
-        </Button>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Button
+            variant={saved ? "secondary" : "outline"}
+            className="flex-1 gap-2 rounded-xl sm:flex-none"
+            onClick={handleToggleSave}
+            disabled={loading}
+          >
+            <Bookmark
+              size={18}
+              className={saved ? "fill-current" : ""}
+            />
+            <span>
+              {loading ? "Saving..." : saved ? "Saved" : "Save"}
+            </span>
+          </Button>
+
+          <Button
+            className="flex-1 gap-2 rounded-xl bg-lime-500 text-white hover:bg-lime-600 sm:flex-none"
+            onClick={() => router.push(`/jobs/${post.id}`)}
+          >
+            <Send size={18} />
+            <span>Apply Now</span>
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );

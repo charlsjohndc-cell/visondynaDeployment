@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type Notification = {
   id: string;
@@ -18,57 +22,107 @@ type Notification = {
   avatar?: string;
 };
 
-export default function NotificationsPopover({ trigger }: { trigger?: React.ReactNode }) {
+const POLL_INTERVAL = 8000;
+
+export default function NotificationsPopover({
+  trigger,
+}: {
+  trigger?: React.ReactNode;
+}) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
-  // Fetch notifications from API
-  const fetchNotifications = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) throw new Error("Failed to fetch notifications");
+  const fetchNotifications = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setLoading(true);
 
-      const data: { notifications: Notification[] } = await res.json();
+      try {
+        const res = await fetch("/api/notifications", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-      // Sort: unread first, then read, newest first
-      const sorted = (data.notifications ?? []).sort((a, b) => {
-        if (a.isRead === b.isRead) {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        }
-        return a.isRead ? 1 : -1;
-      });
+        if (!res.ok) throw new Error("Failed to fetch notifications");
 
-      setNotifications(sorted.slice(0, 3));
-    } catch (err) {
-      console.error(err);
-      setNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const data: { notifications: Notification[] } = await res.json();
+
+        const sorted = (data.notifications ?? []).sort((a, b) => {
+          if (a.isRead === b.isRead) {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          }
+          return a.isRead ? 1 : -1;
+        });
+
+        setNotifications(sorted.slice(0, 3));
+      } catch (err) {
+        console.error("POPOVER_NOTIFICATIONS_FETCH_ERROR", err);
+        if (!silent) setNotifications([]);
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
 
-  const getInitials = (notif: Notification) => {
-    const text = notif.company || notif.jobTitle || notif.message;
-    const words = text.trim().split(" ");
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return (words[0][0] + words[1][0]).toUpperCase();
+    const intervalId = setInterval(() => {
+      fetchNotifications({ silent: true });
+    }, POLL_INTERVAL);
+
+    const handleFocus = () => {
+      fetchNotifications({ silent: true });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchNotifications({ silent: true });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchNotifications]);
+
+  const handleOpenChange = async (nextOpen: boolean) => {
+    setOpen(nextOpen);
+
+    if (nextOpen) {
+      await fetchNotifications();
+    }
   };
 
-  // Mark a notification as read
+  const getInitials = (notif: Notification) => {
+    const text = notif.company || notif.jobTitle || notif.message || "N";
+    const words = text.trim().split(/\s+/).filter(Boolean);
+
+    if (words.length === 0) return "N";
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+
+    return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  };
+
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: "PATCH" });
+      const res = await fetch(`/api/notifications/${id}/read`, {
+        method: "PATCH",
+      });
+
+      if (!res.ok) throw new Error("Failed to mark notification as read");
 
       setNotifications((prev) => {
-        // Update the isRead locally
-        const updated = prev.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+        const updated = prev.map((n) =>
+          n.id === id ? { ...n, isRead: true } : n
+        );
 
-        // Resort: unread first, read at the bottom
         return updated.sort((a, b) => {
           if (a.isRead === b.isRead) {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -77,15 +131,15 @@ export default function NotificationsPopover({ trigger }: { trigger?: React.Reac
         });
       });
     } catch (err) {
-      console.error(err);
+      console.error("MARK_NOTIFICATION_READ_ERROR", err);
     }
   };
 
   return (
-    <Popover>
-      <PopoverTrigger>{trigger}</PopoverTrigger>
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
 
-      <PopoverContent className="w-80 p-0 dark:bg-slate-900">
+      <PopoverContent className="w-80 p-0 dark:bg-slate-900" align="end">
         {loading ? (
           <p className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
             Loading...
@@ -114,19 +168,34 @@ export default function NotificationsPopover({ trigger }: { trigger?: React.Reac
                     {notif.avatar ? (
                       <AvatarImage src={notif.avatar} />
                     ) : (
-                      <AvatarFallback className="bg-lime-600 text-white font-medium">
+                      <AvatarFallback className="bg-lime-600 font-medium text-white">
                         {getInitials(notif)}
                       </AvatarFallback>
                     )}
                   </Avatar>
 
                   <div className="flex-1">
-                    <p className="line-clamp-2 text-sm">{notif.message}</p>
-                    <span className="text-xs text-slate-400">{formattedDate}</span>
+                    <p className="line-clamp-2 text-sm text-slate-900 dark:text-slate-100">
+                      {notif.message}
+                    </p>
+
+                    {(notif.company || notif.jobTitle) && (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {notif.jobTitle && notif.jobTitle}
+                        {notif.jobTitle && notif.company && " • "}
+                        {notif.company && notif.company}
+                      </p>
+                    )}
+
+                    <span className="mt-1 block text-xs text-slate-400">
+                      {formattedDate}
+                    </span>
                   </div>
 
                   {!notif.isRead && (
-                    <span className="text-xs text-lime-600 dark:text-lime-400">New</span>
+                    <span className="text-xs text-lime-600 dark:text-lime-400">
+                      New
+                    </span>
                   )}
                 </div>
               );
@@ -134,16 +203,14 @@ export default function NotificationsPopover({ trigger }: { trigger?: React.Reac
           </div>
         )}
 
-        {notifications.length > 0 && (
-          <div className="w-full border-t dark:border-slate-800 p-2 text-center">
-            <Link
-              href="/notifications"
-              className="text-sm text-slate-600 dark:text-slate-400 hover:underline"
-            >
-              View All Notifications
-            </Link>
-          </div>
-        )}
+        <div className="w-full border-t p-2 text-center dark:border-slate-800">
+          <Link
+            href="/notifications"
+            className="text-sm text-slate-600 hover:underline dark:text-slate-400"
+          >
+            View All Notifications
+          </Link>
+        </div>
       </PopoverContent>
     </Popover>
   );

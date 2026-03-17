@@ -20,6 +20,7 @@ type JobDetails = {
 
 type Application = {
   id: string;
+  applicantId: string;
   name: string;
   email: string;
   formData: JSON;
@@ -72,7 +73,6 @@ function formatPeso(amount: number | null | undefined): string {
     return "Not specified";
   }
   const rounded = Math.round(amount);
-  //   const withCommas = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const withCommas = rounded.toLocaleString();
   return `${withCommas}`;
 }
@@ -89,7 +89,7 @@ async function addWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
     image.onerror = (e) => reject(e);
   });
 
-  const logoWidth = pageWidth * 0.5; // 50% of page width
+  const logoWidth = pageWidth * 0.5;
   const logoHeight = (img.height / img.width) * logoWidth;
   const x = (pageWidth - logoWidth) / 2;
   const y = (pageHeight - logoHeight) / 2;
@@ -101,7 +101,6 @@ async function addWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
 
     const anyDoc = doc as JsPdfWithGState;
 
-    // If GState (opacity) is available, use it for a faint watermark
     if (anyDoc.GState && anyDoc.setGState) {
       const gState = new anyDoc.GState({ opacity: 0.25 });
       anyDoc.setGState(gState);
@@ -109,7 +108,6 @@ async function addWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
       const resetState = new anyDoc.GState({ opacity: 1 });
       anyDoc.setGState(resetState);
     } else {
-      // Fallback: no opacity support, still add the image
       doc.addImage(img, "PNG", x, y, logoWidth, logoHeight, undefined, "FAST");
     }
   }
@@ -131,21 +129,35 @@ export default async function exportToPdf(
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
   const LINE_HEIGHT = 5;
 
-  // GLOBAL STYLE CONSTANTS
   const BRAND_GREEN = "#84cc16";
   const HEADING_COLOR = "#111827";
   const BODY_COLOR = "#4b5563";
   const MUTED_COLOR = "#6b7280";
 
-  const HEADING_TO_CONTENT = 5; // heading -> content
-  const SECTION_GAP = 9; // between sections
-  const HEADER_BOTTOM_GAP = 8; // after top divider line
+  const HEADING_TO_CONTENT = 5;
+  const SECTION_GAP = 9;
+  const HEADER_BOTTOM_GAP = 8;
 
-  const res = await fetch(`/api/applicant/${application.id}`);
-  const data = await res.json();
-  const applicant: Applicant = data.data;
+  let applicant: Applicant | undefined;
 
-  doc.setProperties({ title: application.name });
+  try {
+    const res = await fetch(`/api/applicant/${application.applicantId}`);
+    const data = await res.json();
+
+    if (res.ok && data?.ok && data?.data) {
+      applicant = data.data as Applicant;
+    } else {
+      console.warn("exportToPdf applicant fetch failed:", {
+        status: res.status,
+        body: data,
+        application,
+      });
+    }
+  } catch (error) {
+    console.error("exportToPdf applicant fetch error:", error, application);
+  }
+
+  doc.setProperties({ title: application.name || "Applicant Export" });
 
   let cursorY = TOP_MARGIN;
 
@@ -160,7 +172,6 @@ export default async function exportToPdf(
   // PAGE 1 – APPLICANT PREVIEW
   // ===========================
 
-  // HEADER ROW (VISONDYNA + DATE)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(BRAND_GREEN);
@@ -180,22 +191,24 @@ export default async function exportToPdf(
 
   cursorY += 6;
 
-  // divider
   doc.setDrawColor("#e5e7eb");
   doc.setLineWidth(0.2);
   doc.line(MARGIN_LEFT, cursorY, PAGE_WIDTH - MARGIN_RIGHT, cursorY);
 
   cursorY += HEADER_BOTTOM_GAP;
 
-  // APPLICANT NAME + PROFESSION
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(HEADING_COLOR);
-  doc.text(applicant.name || "Unnamed Applicant", MARGIN_LEFT, cursorY);
+  doc.text(
+    applicant?.name ?? application.name ?? "Unnamed Applicant",
+    MARGIN_LEFT,
+    cursorY,
+  );
 
   cursorY += 6;
 
-  if (applicant.profession) {
+  if (applicant?.profession) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(BODY_COLOR);
@@ -205,14 +218,13 @@ export default async function exportToPdf(
     cursorY += 4;
   }
 
-  // CONTACT INFO (INLINE)
   doc.setFontSize(10);
   doc.setTextColor(MUTED_COLOR);
   doc.setFont("helvetica", "normal");
 
-  const emailText = applicant.email || "N/A";
+  const emailText = applicant?.email || application.email || "N/A";
   const separator = "   |   ";
-  const phoneText = applicant.phone ? `${applicant.phone}` : "N/A";
+  const phoneText = applicant?.phone ? `${applicant.phone}` : "N/A";
 
   doc.text(emailText, MARGIN_LEFT, cursorY);
   const emailWidth = doc.getTextWidth(emailText);
@@ -222,7 +234,6 @@ export default async function exportToPdf(
 
   cursorY += 6;
 
-  // divider before sections
   doc.setDrawColor("#e5e7eb");
   doc.setLineWidth(0.2);
   doc.line(MARGIN_LEFT, cursorY, PAGE_WIDTH - MARGIN_RIGHT, cursorY);
@@ -243,7 +254,7 @@ export default async function exportToPdf(
 
   let lines = wrapText(
     doc,
-    applicant.summary || "No summary provided.",
+    applicant?.summary || "No summary provided.",
     CONTENT_WIDTH,
   );
   let blockHeight = lines.length * LINE_HEIGHT;
@@ -264,7 +275,7 @@ export default async function exportToPdf(
   doc.setTextColor(BODY_COLOR);
 
   const skillsArray =
-    applicant.skills?.map((s) => s.skill?.name).filter(Boolean) ?? [];
+    applicant?.skills?.map((s) => s.skill?.name).filter(Boolean) ?? [];
 
   if (!skillsArray.length) {
     ensureSpace(LINE_HEIGHT);
@@ -295,7 +306,7 @@ export default async function exportToPdf(
   doc.setFontSize(10);
   doc.setTextColor(BODY_COLOR);
 
-  if (!applicant.education || applicant.education.length === 0) {
+  if (!applicant?.education || applicant.education.length === 0) {
     ensureSpace(LINE_HEIGHT);
     doc.text("No education records provided.", MARGIN_LEFT, cursorY);
     cursorY += LINE_HEIGHT + SECTION_GAP;
@@ -338,7 +349,7 @@ export default async function exportToPdf(
       cursorY = innerY;
 
       if (index < applicant.education.length - 1) {
-        cursorY += 4; // between entries
+        cursorY += 4;
       }
     });
 
@@ -358,7 +369,7 @@ export default async function exportToPdf(
   doc.setFontSize(10);
   doc.setTextColor(BODY_COLOR);
 
-  if (!applicant.experience || applicant.experience.length === 0) {
+  if (!applicant?.experience || applicant.experience.length === 0) {
     ensureSpace(LINE_HEIGHT);
     doc.text("No work experience records provided.", MARGIN_LEFT, cursorY);
     cursorY += LINE_HEIGHT + SECTION_GAP;
@@ -400,7 +411,6 @@ export default async function exportToPdf(
         cursorY += 4;
       }
     });
-    // no extra gap needed at bottom
   }
 
   // ===========================
@@ -409,7 +419,6 @@ export default async function exportToPdf(
   doc.addPage();
   cursorY = TOP_MARGIN;
 
-  // header: brand + Job Preview
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(BRAND_GREEN);
@@ -429,7 +438,6 @@ export default async function exportToPdf(
 
   cursorY += HEADER_BOTTOM_GAP;
 
-  // job title
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(HEADING_COLOR);
@@ -437,7 +445,6 @@ export default async function exportToPdf(
 
   cursorY += 6;
 
-  // company + location
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(BODY_COLOR);
@@ -446,7 +453,6 @@ export default async function exportToPdf(
   doc.text(lines, MARGIN_LEFT, cursorY);
   cursorY += blockHeight + 3;
 
-  // status + posted
   const statusLabel = job.status.charAt(0) + job.status.slice(1).toLowerCase();
   const postedDate = format(new Date(job.createdAt), "MMM dd, yyyy");
   const metaRow = `${statusLabel} • Posted ${postedDate}`;
@@ -457,7 +463,6 @@ export default async function exportToPdf(
 
   cursorY += 8;
 
-  // Category / Slots / Salary
   const salaryText = formatPeso(job.salary);
 
   doc.setFont("helvetica", "bold");
@@ -539,14 +544,7 @@ export default async function exportToPdf(
   doc.text(descriptionLines, MARGIN_LEFT, cursorY);
   cursorY += blockHeight + SECTION_GAP;
 
-  // (Application section will go here later)
-
-  // >>> ADD WATERMARK ON ALL PAGES (center, low opacity) <<<
   await addWatermark(doc, PAGE_WIDTH, PAGE_HEIGHT);
-
-  //   doc.output("dataurlnewwindow", {
-  //     filename: `${application.id}_${application.name}.pdf`,
-  //   });
 
   doc.save(`${application.id}_${application.name}`);
 }

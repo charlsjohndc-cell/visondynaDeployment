@@ -17,13 +17,13 @@ import {
   FormLabel,
   FormMessage,
 } from "../ui/form";
-import z from "zod";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Spinner } from "../ui/spinner";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, CheckCircle2 } from "lucide-react";
 import { Calendar } from "../ui/calendar";
 import {
   Select,
@@ -39,7 +39,7 @@ const formSchema = z
   .object({
     firstname: z.string().nonempty("Please enter your first name."),
     lastname: z.string().nonempty("Please enter your last name."),
-    email: z.email("Enter a valid email address.").trim(),
+    email: z.string().trim().email("Enter a valid email address."),
     birthDate: z.date(),
     gender: z.string().nonempty("Please select your gender."),
     role: z.literal("APPLICANT"),
@@ -87,279 +87,371 @@ export default function SignUpForm() {
       confirmPassword: "",
     },
   });
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [emailSent, setEmailSent] = useState<boolean>(false); // New state for email sent
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    const res = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...data }),
-    });
 
-    const error: ServerError = await res.json();
-    if (!error.ok) {
-      toast.error(error.error.message); // Show server error
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...data }),
+      });
+
+      const response: ServerError = await res.json();
+
+      if (!response.ok) {
+        toast.error(response.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      toast.success("Sign up successful! Please verify your email.");
+      setEmailSent(true);
+      form.reset({
+        firstname: "",
+        lastname: "",
+        email: "",
+        birthDate: new Date(),
+        gender: "",
+        role: "APPLICANT",
+        password: "",
+        confirmPassword: "",
+      });
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // Show success message
-    toast.success("Sign up successful! Please verify your email.");
-    setEmailSent(true); // Indicate that the email has been sent
-    setIsLoading(false);
   }
 
   return (
-    <div className="relative h-screen w-full">
-      <div className="flex h-full items-center justify-center px-12">
-        <div className="max-w-lg text-white">
-          <h1 className="w-full text-center text-4xl font-bold">
-            Start Your Career With{" "}
-            <span className="text-lime-400">Visondyna</span>
-          </h1>
-          <p className="mb-6 mt-4 w-full text-center text-sm text-slate-200">
-            We’re excited to have you! A few quick details and you’re in.
-          </p>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),_transparent_30%)]" />
+      <div className="absolute inset-0 bg-grid-white/[0.03] [mask-image:linear-gradient(to_bottom,white,transparent)]" />
 
-          {/* Show success message after signup */}
-          {emailSent ? (
-            <p className="mb-4 w-full text-center text-sm text-green-500">
-              We&apos;ve sent a verification link to your email. Please check it
-              to verify your account.
-            </p>
-          ) : null}
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+        <div className="grid w-full max-w-6xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl lg:grid-cols-2">
+          {/* Left Panel */}
+          <div className="hidden flex-col justify-center border-r border-white/10 bg-gradient-to-br from-lime-500/15 via-emerald-500/10 to-transparent p-10 lg:flex xl:p-14">
+            <div className="max-w-md">
+              <p className="mb-4 inline-flex rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-xs font-medium text-lime-300">
+                Applicant Registration
+              </p>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-              <div className="grid grid-cols-2 items-center gap-4">
-                <FormField
-                  control={form.control}
-                  name="firstname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="John"
-                          className="bg-slate-950"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="Doe"
-                          className="bg-slate-950"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+                Start Your Career With{" "}
+                <span className="text-lime-400">Visondyna</span>
+              </h1>
+
+              <p className="mt-5 text-base leading-7 text-slate-300">
+                Create your account to explore job opportunities, apply faster,
+                and manage your career journey in one place.
+              </p>
+
+              <div className="mt-10 space-y-4">
+                {[
+                  "Create your applicant account in minutes",
+                  "Apply to jobs and track your applications",
+                  "Secure sign up with email verification",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-full bg-lime-400/15 p-1">
+                      <CheckCircle2 className="h-4 w-4 text-lime-400" />
+                    </div>
+                    <p className="text-sm text-slate-300">{item}</p>
+                  </div>
+                ))}
               </div>
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="Johndoe@gmail.com"
-                        className="bg-slate-950"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      We’ll send a verification link.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 items-center gap-4">
-                <FormField
-                  control={form.control}
-                  name="birthDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Date of Birth</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
+            </div>
+          </div>
+
+          {/* Right Panel */}
+          <div className="w-full bg-slate-950/70 p-6 sm:p-8 md:p-10 xl:p-12">
+            <div className="mx-auto w-full max-w-xl">
+              <div className="mb-8 text-center lg:text-left">
+                <h2 className="text-3xl font-bold text-white">Create Account</h2>
+                <p className="mt-2 text-sm text-slate-400">
+                  Fill in your details to get started.
+                </p>
+              </div>
+
+              {emailSent && (
+                <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+                  <p>
+                    We&apos;ve sent a verification link to your email. Please
+                    check your inbox and verify your account.
+                  </p>
+                </div>
+              )}
+
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-5"
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="firstname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-200">
+                            First Name
+                          </FormLabel>
                           <FormControl>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground",
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP")
-                              ) : (
-                                <span>Select your birthdate</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                            <Input
+                              type="text"
+                              placeholder="John"
+                              className="h-11 border-white/10 bg-slate-900/80 text-white placeholder:text-slate-500"
+                              {...field}
+                            />
                           </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent>
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) =>
-                              date > new Date() || date < new Date("1900-01-01")
-                            }
-                            captionLayout="dropdown"
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="gender"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Gender</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="lastname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-200">
+                            Last Name
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder="Doe"
+                              className="h-11 border-white/10 bg-slate-900/80 text-white placeholder:text-slate-500"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-200">Email</FormLabel>
                         <FormControl>
-                          <SelectTrigger className="bg-slate-950">
-                            <SelectValue placeholder="Choose your gender" />
-                          </SelectTrigger>
+                          <Input
+                            type="email"
+                            placeholder="johndoe@gmail.com"
+                            className="h-11 border-white/10 bg-slate-900/80 text-white placeholder:text-slate-500"
+                            {...field}
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormDescription className="text-slate-500">
+                          We’ll send a verification link to this address.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="birthDate"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel className="text-slate-200">
+                            Date of Birth
+                          </FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={cn(
+                                    "h-11 w-full justify-start border-white/10 bg-slate-900/80 pl-3 text-left font-normal text-white hover:bg-slate-900",
+                                    !field.value && "text-slate-500",
+                                  )}
+                                >
+                                  {field.value ? (
+                                    format(field.value, "PPP")
+                                  ) : (
+                                    <span>Select your birthdate</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-auto border-white/10 bg-slate-950 p-0"
+                              align="start"
+                            >
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                disabled={(date) =>
+                                  date > new Date() ||
+                                  date < new Date("1900-01-01")
+                                }
+                                captionLayout="dropdown"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-200">
+                            Gender
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-11 border-white/10 bg-slate-900/80 text-white">
+                                <SelectValue placeholder="Choose your gender" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="border-white/10 bg-slate-950 text-white">
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-200">
+                          Password
+                        </FormLabel>
+                        <FormControl>
+                          <Password>
+                            <Input
+                              placeholder="Create a password"
+                              className="h-11 border-none bg-transparent text-white placeholder:text-slate-500 focus-visible:ring-0"
+                              {...field}
+                            />
+                          </Password>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-200">
+                          Confirm Password
+                        </FormLabel>
+                        <FormControl>
+                          <Password>
+                            <Input
+                              placeholder="Confirm your password"
+                              className="h-11 border-none bg-transparent text-white placeholder:text-slate-500 focus-visible:ring-0"
+                              {...field}
+                            />
+                          </Password>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="h-11 w-full rounded-xl bg-lime-500 font-medium text-slate-950 hover:bg-lime-400"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <Spinner />
+                        Signing Up...
+                      </span>
+                    ) : (
+                      "Create Account"
+                    )}
+                  </Button>
+                </form>
+              </Form>
+
+              <div className="my-6 flex items-center">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="px-3 text-sm text-slate-500">Or continue with</span>
+                <div className="h-px flex-1 bg-white/10" />
               </div>
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Password>
-                        <Input
-                          placeholder="Password"
-                          className="border-none bg-transparent focus-visible:ring-0"
-                          {...field}
-                        />
-                      </Password>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
-                      <Password>
-                        <Input
-                          placeholder="Password"
-                          className="border-none bg-transparent focus-visible:ring-0"
-                          {...field}
-                        />
-                      </Password>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                type="submit"
-                size={isLoading ? "icon" : "lg"}
-                className="!mt-6 w-full bg-lime-500 text-white"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Spinner />
-                    <span>Signing Up</span>
-                  </>
-                ) : (
-                  <span>Sign Up</span>
-                )}
-              </Button>
-            </form>
-          </Form>
 
-          <div className="my-6 flex items-center">
-            <div className="h-px flex-1 bg-white/20"></div>
-            <span className="px-3 text-sm text-white/60">Or</span>
-            <div className="h-px flex-1 bg-white/20"></div>
-          </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  type="button"
+                  className="h-11 border-white/10 bg-slate-900/70 text-white hover:bg-slate-900"
+                  onClick={() => signIn("google", { callbackUrl: "/feed" })}
+                >
+                  <Image
+                    src="/google-icon.svg"
+                    alt="Google Logo"
+                    width={18}
+                    height={18}
+                  />
+                  Sign up with Google
+                </Button>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => signIn("google", { callbackUrl: "/feed" })}
-            >
-              <Image
-                src="/google-icon.svg"
-                alt="Google Logo"
-                width={16}
-                height={16}
-              />
-              Sign up with Google
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => signIn("facebook", { callbackUrl: "/feed" })}
-            >
-              <Image
-                src="/fecebook.svg"
-                alt="Facebook Logo"
-                width={20}
-                height={20}
-              />
-              Sign up with Facebook
-            </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  type="button"
+                  className="h-11 border-white/10 bg-slate-900/70 text-white hover:bg-slate-900"
+                  onClick={() => signIn("facebook", { callbackUrl: "/feed" })}
+                >
+                  <Image
+                    src="/fecebook.svg"
+                    alt="Facebook Logo"
+                    width={18}
+                    height={18}
+                  />
+                  Sign up with Facebook
+                </Button>
+              </div>
+
+              <p className="mt-8 text-center text-sm text-slate-400">
+                Already have an account?{" "}
+                <Link
+                  href="/auth/signin"
+                  className="font-medium text-lime-400 transition hover:text-lime-300 hover:underline"
+                >
+                  Sign In
+                </Link>
+              </p>
+            </div>
           </div>
-          <p className="mt-6 w-full text-center text-sm text-white/60">
-            Already have an account?{" "}
-            <Link
-              href="/auth/signin"
-              className="text-lime-500 hover:text-lime-400 hover:underline"
-            >
-              Sign In
-            </Link>
-          </p>
         </div>
       </div>
     </div>

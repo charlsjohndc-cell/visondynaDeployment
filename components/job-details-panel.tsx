@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { toTitleCase } from "@/lib/utils";
-import { MapPin, Users, Tag, Banknote } from "lucide-react";
+import { MapPin, Users, Tag, Banknote, Bookmark } from "lucide-react";
 import ApplyJobDialog from "./apply-job-dialog";
 import { SessionProvider } from "next-auth/react";
 
@@ -34,14 +34,36 @@ export default function JobDetailsPanel({
   skills: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false); // initial: not saved
+  const [loading, setLoading] = useState(false);
+
+  const handleToggleSave = async () => {
+    if (loading) return; // prevent double clicks
+    setLoading(true);
+    try {
+      await fetch("/api/jobs/save", {
+        method: saved ? "DELETE" : "POST",
+        body: JSON.stringify({ jobId: job.id }),
+      });
+      setSaved(!saved);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SessionProvider>
-      <Card className="flex w-2/3 flex-col bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800">
+      <Card className="flex w-2/3 flex-col border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950">
         <ScrollArea className="h-full p-6">
           <CardHeader>
-            <h2 className="m-0 border-none p-0 text-gray-900 dark:text-gray-100">{job.title}</h2>
-            <h4 className="m-0 p-0 text-gray-500 dark:text-gray-400">{job.company}</h4>
+            <h2 className="m-0 border-none p-0 text-gray-900 dark:text-gray-100">
+              {job.title}
+            </h2>
+            <h4 className="m-0 p-0 text-gray-500 dark:text-gray-400">
+              {job.company}
+            </h4>
           </CardHeader>
 
           <CardContent className="space-y-6 px-6 pb-8">
@@ -76,7 +98,7 @@ export default function JobDetailsPanel({
                     <Badge
                       key={skill.id}
                       variant="outline"
-                      className="font-normal text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-700"
+                      className="border-gray-300 font-normal text-gray-900 dark:border-slate-700 dark:text-gray-100"
                     >
                       {skill.name}
                     </Badge>
@@ -97,8 +119,23 @@ export default function JobDetailsPanel({
           <ScrollBar orientation="vertical" />
         </ScrollArea>
 
-        <CardFooter className="flex shrink-0 justify-end gap-3 border-t border-gray-200 dark:border-slate-800 p-4">
-          <Button variant="ghost" className="text-gray-900 dark:text-gray-100">Save</Button>
+        <CardFooter className="flex shrink-0 justify-end gap-3 border-t border-gray-200 p-4 dark:border-slate-800">
+          <Button
+            variant="outline"
+            className={`flex items-center gap-2 ${
+              saved
+                ? "border-lime-500 text-lime-500 hover:bg-lime-500/10 dark:hover:bg-lime-500/20"
+                : "border-gray-300 text-gray-400 dark:border-slate-700"
+            }`}
+            onClick={handleToggleSave}
+            disabled={loading}
+          >
+            <Bookmark
+              className={`size-4 ${saved ? "text-lime-500" : "text-gray-400"}`}
+            />
+            {saved ? "Saved" : "Save"}
+          </Button>
+
           <Button
             onClick={() => setOpen(true)}
             className="bg-lime-500 text-white dark:bg-lime-500 dark:text-white"

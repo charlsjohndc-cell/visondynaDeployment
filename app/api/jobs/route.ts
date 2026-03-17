@@ -1,4 +1,3 @@
-// app/api/jobs/route.ts
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
 import {
@@ -16,28 +15,23 @@ import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+// --- helpers ---
 function buildJobWhere(
   q?: string | null,
   categoryId?: string | null,
-  status?: JobStatus,
+  status?: JobStatus
 ) {
-  const trimmedQ = q?.trim();
-  const trimmedCategoryId = categoryId?.trim();
+  const where: Record<string, unknown> = { deletedAt: null };
 
-  // base filter: exclude archived jobs
-  const where: Record<string, unknown> = {
-    deletedAt: null,
-  };
-
-  if (trimmedCategoryId) where.categoryId = trimmedCategoryId;
+  if (categoryId?.trim()) where.categoryId = categoryId.trim();
   if (status) where.status = status;
 
-  if (trimmedQ) {
+  if (q?.trim()) {
     const searchConditions = [
-      { title: { contains: trimmedQ, mode: "insensitive" as const } },
-      { description: { contains: trimmedQ, mode: "insensitive" as const } },
-      { company: { contains: trimmedQ, mode: "insensitive" as const } },
-      { location: { contains: trimmedQ, mode: "insensitive" as const } },
+      { title: { contains: q.trim(), mode: "insensitive" as const } },
+      { description: { contains: q.trim(), mode: "insensitive" as const } },
+      { company: { contains: q.trim(), mode: "insensitive" as const } },
+      { location: { contains: q.trim(), mode: "insensitive" as const } },
     ];
     Object.assign(where, { OR: searchConditions });
   }
@@ -45,63 +39,46 @@ function buildJobWhere(
   return where;
 }
 
-const SORTABLE = [
-  "title",
-  "salary",
-  "manpower",
-  "applications",
-  "createdAt",
-] as const;
+const SORTABLE = ["title", "salary", "manpower", "applications", "createdAt"] as const;
 type SortBy = (typeof SORTABLE)[number];
 type SortDir = "asc" | "desc";
 
-function readSort(url: URL): { sortBy: SortBy; sortDir: SortDir } {
-  const rawBy = (url.searchParams.get("sortBy") || "createdAt") as SortBy;
-  const sortBy: SortBy = (SORTABLE as readonly string[]).includes(rawBy)
-    ? rawBy
-    : "createdAt";
+function readSort(url: URL | { searchParams: URLSearchParams }) {
+  const rawBy = (url.searchParams.get("sortBy") || "createdAt") as string;
+  const sortBy: SortBy = SORTABLE.includes(rawBy as SortBy) ? (rawBy as SortBy) : "createdAt";
 
-  let sortDir = (url.searchParams.get("sortDir") || "desc") as SortDir;
+  let sortDir: SortDir = (url.searchParams.get("sortDir") as SortDir) || "desc";
   if (sortDir !== "asc" && sortDir !== "desc") sortDir = "desc";
+  if (!url.searchParams.has("sortDir") && sortBy !== "createdAt") sortDir = "asc";
 
-  if (!url.searchParams.has("sortDir") && sortBy !== "createdAt") {
-    sortDir = "asc";
-  }
   return { sortBy, sortDir };
 }
 
-function readOffsetParams(url: URL) {
-  const limit = Math.max(
-    1,
-    Math.min(100, Number(url.searchParams.get("limit") || 10)),
-  );
-  const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+function readOffsetParams(url: URL | { searchParams: URLSearchParams }) {
+  const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? 10)));
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const skip = (page - 1) * limit;
   return { limit, page, skip };
 }
 
+// --- API Handlers ---
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-
+    const url = req.nextUrl;
     const q = url.searchParams.get("q") || undefined;
     const categoryId = url.searchParams.get("categoryId") || undefined;
-
     const statusParam = url.searchParams.get("status");
-    const status =
-      statusParam === "OPEN" ||
-      statusParam === "CLOSED" ||
-      statusParam === "FILLED"
+    const status: JobStatus | undefined =
+      statusParam === "OPEN" || statusParam === "CLOSED" || statusParam === "FILLED"
         ? (statusParam as JobStatus)
         : undefined;
 
     const { sortBy, sortDir } = readSort(url);
     const where = buildJobWhere(q, categoryId, status);
 
-    // cursor pagination for createdAt
+    // --- cursor pagination for createdAt ---
     if (sortBy === "createdAt") {
       const { limit, cursor } = readPaginationParams(url);
-
       let items = await prisma.job.findMany({
         where,
         take: limit + 1,
@@ -119,12 +96,8 @@ export async function GET(req: NextRequest) {
           createdAt: true,
           categoryId: true,
           category: { select: { id: true, name: true } },
-          skills: {
-            select: { skillTag: { select: { id: true, name: true } } },
-          },
-          _count: {
-            select: { applications: true },
-          },
+          skills: { select: { skillTag: { select: { id: true, name: true } } } },
+          _count: { select: { applications: true } },
         },
       });
 
@@ -143,21 +116,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // offset pagination for other sorts
+    // --- offset pagination for other sorts ---
     const { limit, page, skip } = readOffsetParams(url);
-
     const orderByClause: Prisma.JobOrderByWithRelationInput[] =
       sortBy === "applications"
-        ? [
-            // sort by relation count
-            { applications: { _count: sortDir } },
-            { id: "asc" },
-          ]
-        : [
-            // sort by scalar field
-            { [sortBy]: sortDir } as Prisma.JobOrderByWithRelationInput,
-            { id: "asc" },
-          ];
+        ? [{ applications: { _count: sortDir } }, { id: "asc" }]
+        : [{ [sortBy]: sortDir } as Prisma.JobOrderByWithRelationInput, { id: "asc" }];
 
     const [items, total] = await Promise.all([
       prisma.job.findMany({
@@ -177,9 +141,7 @@ export async function GET(req: NextRequest) {
           createdAt: true,
           categoryId: true,
           category: { select: { id: true, name: true } },
-          _count: {
-            select: { applications: true },
-          },
+          _count: { select: { applications: true } },
         },
       }),
       prisma.job.count({ where }),
@@ -193,54 +155,23 @@ export async function GET(req: NextRequest) {
       limit,
       sortBy,
       sortDir,
-      paging: {
-        mode: "offset",
-        page,
-        total,
-        totalPages,
-        hasMore,
-      },
+      paging: { mode: "offset", page, total, totalPages, hasMore },
     });
   } catch (err: unknown) {
-    if (err instanceof PrismaClientKnownRequestError) {
-      return serverError(err);
-    }
     return serverError(err);
   }
 }
-
-type CreateJobPayload = {
-  title: string;
-  description: string;
-  location: string;
-  salary: number;
-  manpower: number;
-  company: string;
-  categoryId: string;
-  status?: JobStatus;
-  skills?: string[];
-};
-
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
-
-    console.log(userId);
-
     if (!userId) return badRequest("Unauthorized");
 
-    const body = (await req.json()) as unknown;
+    const body = await req.json();
     const parsed = createJobSchema.safeParse(body);
-    if (!parsed.success) {
-      return badRequest("Invalid job payload", parsed.error.flatten());
-    }
+    if (!parsed.success) return badRequest("Invalid job payload", parsed.error.flatten());
 
-    const skills: string[] | undefined = Array.isArray(
-      (body as Partial<CreateJobPayload>).skills,
-    )
-      ? ((body as Partial<CreateJobPayload>).skills as string[])
-      : undefined;
+    const skills: string[] | undefined = Array.isArray(body.skills) ? body.skills : undefined;
 
     const category = await prisma.category.findUnique({
       where: { id: parsed.data.categoryId },
@@ -250,10 +181,7 @@ export async function POST(req: NextRequest) {
 
     const result = await prisma.$transaction(async (tx) => {
       const job = await tx.job.create({
-        data: {
-          ...parsed.data,
-          postedById: userId,
-        },
+        data: { ...parsed.data, postedById: userId },
         select: {
           id: true,
           title: true,
@@ -273,14 +201,59 @@ export async function POST(req: NextRequest) {
           where: { id: { in: skills } },
           select: { id: true },
         });
+
         if (validSkills.length !== skills.length) {
-          throw new Error("One or more skill ids are invalid.");
+          throw new Error("Invalid skill ids");
         }
 
         await tx.jobSkillTag.createMany({
-          data: validSkills.map((s) => ({ jobId: job.id, skillTagId: s.id })),
+          data: validSkills.map((s) => ({
+            jobId: job.id,
+            skillTagId: s.id,
+          })),
           skipDuplicates: true,
         });
+      }
+
+      const applicants = await tx.user.findMany({
+        where: {
+          role: "APPLICANT",
+          deletedAt: null,
+          isSuspended: false,
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          deletedAt: true,
+          isSuspended: true,
+        },
+      });
+
+      console.log("JOB CREATED:", job.id, job.title);
+      console.log("APPLICANTS FOUND:", applicants);
+
+      if (applicants.length > 0) {
+        const payload = applicants.map((applicant) => ({
+          userId: applicant.id,
+          message: `New job posted: ${job.title}`,
+          type: "Job",
+          status: "Open for applications",
+          company: job.company,
+          jobTitle: job.title,
+          location: job.location,
+          isRead: false,
+        }));
+
+        console.log("NOTIFICATION PAYLOAD:", payload);
+
+        const createdNotifications = await tx.notification.createMany({
+          data: payload,
+        });
+
+        console.log("CREATE MANY RESULT:", createdNotifications);
+      } else {
+        console.log("NO APPLICANTS FOUND TO NOTIFY");
       }
 
       return job;
@@ -289,10 +262,7 @@ export async function POST(req: NextRequest) {
     return created(result);
   } catch (err: unknown) {
     if (err instanceof PrismaClientKnownRequestError) {
-      if (err.code === "P2002") {
-        return conflict("Unique constraint violation", err.meta);
-      }
-      return serverError(err);
+      if (err.code === "P2002") return conflict("Unique constraint violation", err.meta);
     }
     return serverError(err);
   }

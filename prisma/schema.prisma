@@ -9,9 +9,9 @@ datasource db {
 }
 
 /// *
-///  * =========================
-///  * USER
-///  * =========================
+/// * =========================
+/// * USER
+/// * =========================
 model User {
   id                     String                  @id @default(uuid())
   firstname              String
@@ -32,12 +32,13 @@ model User {
   messagesSent           Message[]               @relation("MessageSender")
   notifications          Notification[]
   applicantInfo          Profile?
+  savedJobs              SavedJob[]
 }
 
 /// *
-///  * =========================
-///  * PROFILE
-///  * =========================
+/// * =========================
+/// * PROFILE
+/// * =========================
 model Profile {
   id               String              @id @default(uuid())
   userId           String              @unique
@@ -56,9 +57,9 @@ model Profile {
 }
 
 /// *
-///  * =========================
-///  * CATEGORY & SKILLS
-///  * =========================
+/// * =========================
+/// * CATEGORY & SKILLS
+/// * =========================
 model Category {
   id     String     @id @default(uuid())
   name   String
@@ -88,9 +89,9 @@ model ApplicantSkillTag {
 }
 
 /// *
-///  * =========================
-///  * EDUCATION & EXPERIENCE
-///  * =========================
+/// * =========================
+/// * EDUCATION & EXPERIENCE
+/// * =========================
 model Education {
   id                 String    @id @default(uuid())
   course             String
@@ -113,9 +114,9 @@ model Experience {
 }
 
 /// *
-///  * =========================
-///  * JOB & APPLICATION
-///  * =========================
+/// * =========================
+/// * JOB & APPLICATION
+/// * =========================
 model Job {
   id           String        @id @default(uuid())
   title        String
@@ -134,6 +135,7 @@ model Job {
   category     Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   postedBy     User?         @relation("PostedJobs", fields: [postedById], references: [id])
   skills       JobSkillTag[]
+  savedBy      SavedJob[]
 }
 
 model Application {
@@ -152,29 +154,47 @@ model Application {
 }
 
 /// *
-///  * =========================
-///  * NOTIFICATIONS (FIXED)
-///  * =========================
+/// * =========================
+/// * SAVED JOBS (ADDED)
+/// * =========================
+model SavedJob {
+  id        String   @id @default(uuid())
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+/// *
+/// * =========================
+/// * NOTIFICATIONS (FIXED)
+/// * =========================
 model Notification {
-  id        String             @id @default(uuid())
+  id        String           @id @default(uuid())
   userId    String
   message   String
-  type      ApplicationStatus?
-  isRead    Boolean            @default(false)
-  createdAt DateTime           @default(now())
+  type      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
   company   String?
   jobTitle  String?
   location  String?
   status    String
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
+
 /// *
-///  * =========================
-///  * JOB SKILLS
-///  * =========================
+/// * =========================
+/// * JOB SKILLS
+/// * =========================
 model JobSkillTag {
   jobId      String
   skillTagId String
@@ -185,9 +205,9 @@ model JobSkillTag {
 }
 
 /// *
-///  * =========================
-///  * EMAIL VERIFICATION
-///  * =========================
+/// * =========================
+/// * EMAIL VERIFICATION
+/// * =========================
 model EmailVerificationToken {
   id        String   @id @default(cuid())
   userId    String   @unique
@@ -197,9 +217,9 @@ model EmailVerificationToken {
 }
 
 /// *
-///  * =========================
-///  * MESSAGING
-///  * =========================
+/// * =========================
+/// * MESSAGING
+/// * =========================
 model Conversation {
   id                 String    @id @default(cuid())
   applicantProfileId String
@@ -229,9 +249,9 @@ model Message {
 }
 
 /// *
-///  * =========================
-///  * ENUMS
-///  * =========================
+/// * =========================
+/// * ENUMS
+/// * =========================
 enum Role {
   ADMIN
   APPLICANT
@@ -252,4 +272,5 @@ enum ApplicationStatus {
   OFFERED
   HIRED
   REJECTED
+  WITHDRAWN
 }

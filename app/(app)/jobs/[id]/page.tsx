@@ -1,3 +1,5 @@
+"use server";
+
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -14,20 +16,37 @@ import {
 import { Banknote, MapPin } from "lucide-react";
 import Link from "next/link";
 
-type PageProps = { params: { id: string } };
+type PageProps = { params: { id: string | string[] } };
 
+// Helper: safely unwrap ID
+function getJobId(param: string | string[] | undefined): string | null {
+  if (!param) return null;
+  return Array.isArray(param) ? param[0] : param;
+}
+
+// Generate metadata safely
 export async function generateMetadata({ params }: PageProps) {
+  const resolvedParams = await params;
+  const jobId = getJobId(resolvedParams.id);
+  if (!jobId) return { title: "Job not found · Visondyna" };
+
   const job = await prisma.job.findUnique({
-    where: { id: params.id },
+    where: { id: jobId },
     select: { title: true, company: true },
   });
+
   if (!job) return { title: "Job not found · Visondyna" };
   return { title: `${job.title} at ${job.company} · Visondyna` };
 }
 
 export default async function JobDetailPage({ params }: PageProps) {
+  const resolvedParams = await params;
+  const jobId = getJobId(resolvedParams.id);
+  if (!jobId) notFound();
+
+  // Fetch main job
   const job = await prisma.job.findUnique({
-    where: { id: params.id },
+    where: { id: jobId },
     select: {
       id: true,
       title: true,
@@ -46,6 +65,7 @@ export default async function JobDetailPage({ params }: PageProps) {
 
   if (!job) notFound();
 
+  // Fetch related jobs
   const related = await prisma.job.findMany({
     where: { categoryId: job.categoryId },
     orderBy: { createdAt: "desc" },
@@ -61,37 +81,29 @@ export default async function JobDetailPage({ params }: PageProps) {
     },
   });
 
-  const dedup = new Map<string, (typeof related)[number]>();
-  dedup.set(job.id, {
-    id: job.id,
-    title: job.title,
-    company: job.company,
-    location: job.location,
-    createdAt: job.createdAt,
-    salary: job.salary,
-    description: job.description,
-  });
-  for (const r of related) dedup.set(r.id, r);
-  const list = Array.from(dedup.values());
+  // Deduplicate current job from related jobs
+  const dedupIds = new Set<string>();
+  dedupIds.add(job.id);
+  for (const r of related) dedupIds.add(r.id);
+  const list = [job, ...related.filter((r) => r.id !== job.id)];
 
+  // Extract skill tags
   const skills = job.skills.map((s) => s.skillTag);
 
   return (
     <div className="h-full overflow-hidden">
       <div className="mx-auto flex h-full w-3/4 gap-6">
+        {/* Related Jobs Sidebar */}
         <div className="flex min-h-0 w-5/12 flex-col border-r border-slate-800 px-6">
           <h4 className="mb-4 text-white">Jobs you may like</h4>
 
           <ScrollArea className="h-full px-4">
             <div className="space-y-4">
               {list.length === 0 ? (
-                <div className="text-sm text-slate-400">
-                  No related jobs yet.
-                </div>
+                <div className="text-sm text-slate-400">No related jobs yet.</div>
               ) : (
                 list.map((r) => {
                   const isCurrent = r.id === job.id;
-
                   return (
                     <div key={r.id}>
                       <Link href={`/jobs/${r.id}`}>
@@ -102,9 +114,7 @@ export default async function JobDetailPage({ params }: PageProps) {
                         >
                           <CardHeader>
                             <CardTitle className="text-gray-900 dark:text-gray-100">{r.title}</CardTitle>
-                            <CardTitle className="text-gray-500 dark:text-gray-400">
-                              {r.company}
-                            </CardTitle>
+                            <CardTitle className="text-gray-500 dark:text-gray-400">{r.company}</CardTitle>
                           </CardHeader>
 
                           <CardContent className="flex flex-col space-y-2">
@@ -139,6 +149,7 @@ export default async function JobDetailPage({ params }: PageProps) {
           </ScrollArea>
         </div>
 
+        {/* Job Details Panel */}
         <JobDetailsPanel job={job} skills={skills} />
       </div>
     </div>

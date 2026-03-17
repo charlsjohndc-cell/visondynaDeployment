@@ -1,15 +1,19 @@
-// app/api/applications/[id]/route.ts
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
 import { ok, notFound, badRequest, serverError } from "@/lib/http";
 import { updateApplicationStatusSchema } from "@/lib/schemas/applications";
+import { ApplicationStatus } from "@prisma/client";
 
-type Params = { params: { id: string } };
-
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const a = await prisma.application.findUnique({
-      where: { id: params.id },
+    const { id } = await context.params;
+    if (!id) return badRequest("Missing application ID");
+
+    const application = await prisma.application.findUnique({
+      where: { id },
       select: {
         id: true,
         status: true,
@@ -23,18 +27,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
         },
       },
     });
-    if (!a) return notFound("Application not found");
+
+    if (!application) return notFound("Application not found");
 
     return ok({
-      id: a.id,
-      status: a.status,
-      submittedAt: a.submittedAt.toISOString(),
-      formData: a.formData,
-      job: a.job,
+      id: application.id,
+      status: application.status,
+      submittedAt: application.submittedAt.toISOString(),
+      formData: application.formData,
+      job: application.job,
       applicant: {
-        id: a.applicant.id,
-        name: `${a.applicant.firstname} ${a.applicant.lastname}`,
-        email: a.applicant.email,
+        id: application.applicant.id,
+        name: `${application.applicant.firstname} ${application.applicant.lastname}`,
+        email: application.applicant.email,
       },
     });
   } catch (err) {
@@ -42,51 +47,66 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await context.params;
+    if (!id) return badRequest("Missing application ID");
+
     const json = await req.json();
     const parsed = updateApplicationStatusSchema.safeParse(json);
     if (!parsed.success) {
       return badRequest("Invalid payload", parsed.error.flatten());
     }
 
-    // Update application status and select applicantId + job info
-    const updated = await prisma.application.update({
-      where: { id: params.id },
-      data: { status: parsed.data.status },
+    const existing = await prisma.application.findUnique({
+      where: { id },
       select: {
         id: true,
         status: true,
-        applicantId: true, // Needed for notification
+        applicantId: true,
         job: {
-          select: {
-            id: true,
-            title: true,
-            company: true,
-            location: true,
-          },
+          select: { id: true, title: true, company: true, location: true },
         },
       },
     });
 
-    // Create notification for applicant
+    if (!existing) return notFound("Application not found");
+
+    if (existing.status === ApplicationStatus.WITHDRAWN) {
+      return badRequest(
+        "This application has already been withdrawn by the applicant and can no longer be updated."
+      );
+    }
+
+    const updated = await prisma.application.update({
+      where: { id },
+      data: { status: parsed.data.status },
+      select: {
+        id: true,
+        status: true,
+        applicantId: true,
+        job: {
+          select: { id: true, title: true, company: true, location: true },
+        },
+      },
+    });
+
     await prisma.notification.create({
       data: {
         userId: updated.applicantId,
         message: `Your application for ${updated.job.title} at ${updated.job.company} has been updated to ${parsed.data.status}`,
-        type: parsed.data.status, // ApplicationStatus enum
+        type: parsed.data.status,
         company: updated.job.company,
         jobTitle: updated.job.title,
         location: updated.job.location,
-        status: "UNREAD", // notification status
+        status: "UNREAD",
       },
     });
 
-    // Return updated application status
-    return ok({
-      id: updated.id,
-      status: updated.status,
-    });
+    return ok({ id: updated.id, status: updated.status });
   } catch (err) {
     return serverError(err);
   }

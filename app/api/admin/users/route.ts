@@ -3,13 +3,14 @@ import { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 import { ok, serverError, badRequest, created } from "@/lib/http";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
-import type { Prisma, Role } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 type StatusFilter = "ACTIVE" | "SUSPENDED";
+type RoleFilter = "ADMIN" | "HR" | "APPLICANT";
 
 function readOffsetParams(url: URL) {
   const limit = Math.max(
@@ -21,10 +22,16 @@ function readOffsetParams(url: URL) {
 }
 
 // -----------------------------------
-// GET — list admin + HR users
+// GET — list admin + HR + applicant users
 // -----------------------------------
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user || session.user.role !== "ADMIN") {
+      return badRequest("Unauthorized");
+    }
+
     const url = new URL(req.url);
     const rawQ = url.searchParams.get("q") || "";
     const q = rawQ.trim();
@@ -35,12 +42,21 @@ export async function GET(req: NextRequest) {
         ? statusParam
         : null;
 
+    const roleParam = url.searchParams.get("role");
+    const role: RoleFilter | null =
+      roleParam === "ADMIN" ||
+      roleParam === "HR" ||
+      roleParam === "APPLICANT"
+        ? roleParam
+        : null;
+
     const { limit, page, skip } = readOffsetParams(url);
-    const allowedRoles: Role[] = ["ADMIN", "HR"];
 
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
-      role: { in: allowedRoles },
+      ...(role
+        ? { role }
+        : { role: { in: ["ADMIN", "HR", "APPLICANT"] } }),
       ...(status === "ACTIVE"
         ? { isSuspended: false }
         : status === "SUSPENDED"
@@ -120,7 +136,6 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data;
 
-    // Check duplicate email
     const existing = await prisma.user.findUnique({
       where: { email: data.email },
       select: { id: true },

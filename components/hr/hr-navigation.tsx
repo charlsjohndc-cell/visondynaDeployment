@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Bell,
   MessageCircle,
   BriefcaseBusiness,
   Blocks,

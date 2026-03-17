@@ -31,6 +31,7 @@ import {
   CardTitle,
 } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
+import { Badge } from "./ui/badge";
 
 const formSchema = z.object({
   coverLetter: z
@@ -54,6 +55,37 @@ type ExistingApplication = {
   formData?: { coverLetter?: string };
 };
 
+function getStatusLabel(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function getStatusClasses(status: string) {
+  switch (status) {
+    case "SUBMITTED":
+      return "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+    case "UNDER_REVIEW":
+      return "border-yellow-300 bg-yellow-100 text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/40 dark:text-yellow-300";
+    case "SHORTLISTED":
+      return "border-blue-300 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300";
+    case "INTERVIEWED":
+      return "border-indigo-300 bg-indigo-100 text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300";
+    case "OFFERED":
+      return "border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-300";
+    case "HIRED":
+      return "border-lime-300 bg-lime-100 text-lime-800 dark:border-lime-900 dark:bg-lime-950/40 dark:text-lime-300";
+    case "REJECTED":
+      return "border-red-300 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300";
+    case "WITHDRAWN":
+      return "border-slate-300 bg-slate-200 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+    default:
+      return "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+  }
+}
+
 export default function ApplyJobDialog({
   jobId,
   open,
@@ -73,6 +105,7 @@ export default function ApplyJobDialog({
 
   useEffect(() => {
     if (!open) return;
+
     let cancelled = false;
     setLoading(true);
     setExistingApp(null);
@@ -80,6 +113,7 @@ export default function ApplyJobDialog({
     (async () => {
       try {
         const res = await fetch(`/api/jobs/${jobId}/apply`);
+
         if (!res.ok) {
           if (res.status === 401) {
             toast.error("Please sign in to apply for this job");
@@ -87,9 +121,15 @@ export default function ApplyJobDialog({
           }
           throw new Error(await res.text());
         }
+
         const json = await res.json();
-        if (!cancelled && json.ok && json.data) {
-          setExistingApp(json.data);
+
+        if (!cancelled && json.ok) {
+          if (json.data?.applied && json.data?.application) {
+            setExistingApp(json.data.application);
+          } else {
+            setExistingApp(null);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -120,93 +160,142 @@ export default function ApplyJobDialog({
       }
 
       const text = await res.text();
+
       if (!res.ok) {
         toast.error("Failed to submit application", { description: text });
         return;
       }
 
       const json = JSON.parse(text);
-      if (json.ok && json.data) {
+
+      if (json.ok && json.data?.application) {
+        toast.success("Application submitted successfully!");
+        setExistingApp(json.data.application);
+        form.reset();
+      } else if (json.ok && json.data) {
         toast.success("Application submitted successfully!");
         setExistingApp(json.data);
+        form.reset();
       } else {
         toast.error("Unexpected server response");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Network error", { description: "Please try again later" });
+      toast.error("Network error", {
+        description: "Please try again later",
+      });
     } finally {
       setSubmitting(false);
     }
   }
 
+  const coverLetterValue = form.watch("coverLetter") || "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl rounded-lg bg-slate-950 p-6 text-slate-100">
-        <DialogHeader>
-          <DialogTitle className="text-xl">Quick Application</DialogTitle>
-          <DialogDescription className="w-full">
-            Submit your application below to apply for the position. We’ll send
-            your online profile automatically — just add a short cover letter to
-            increase your chances of getting noticed.
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-950">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+            Quick Application
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
+            Submit your profile with a short cover letter.
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-24 w-full" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-40 w-full" />
           </div>
         ) : existingApp ? (
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>You’ve already applied for this position.</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <CardDescription>
-                  Looks like you’ve already applied for this position — great
-                  job taking that step! We’ll notify you when there’s an update
-                  on your application status.
-                </CardDescription>
-                <CardDescription>
-                  Your application{" "}
-                  {existingApp.status === "REVIEWED" ? "has been" : "is"}{" "}
-                  {existingApp.status.toLowerCase()}
-                </CardDescription>
+          <Card className="border-slate-200 shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                  Already Applied
+                </CardTitle>
+                <Badge
+                  variant="outline"
+                  className={`rounded-full px-3 py-1 text-xs ${getStatusClasses(existingApp.status)}`}
+                >
+                  {getStatusLabel(existingApp.status)}
+                </Badge>
+              </div>
+              <CardDescription className="text-sm text-slate-500 dark:text-slate-400">
+                Submitted on {new Date(existingApp.submittedAt).toLocaleString()}
+              </CardDescription>
+            </CardHeader>
 
-                <ScrollArea className="h-64 min-h-0">
-                  <CardDescription className="whitespace-pre-line">
-                    {existingApp.formData?.coverLetter}
-                  </CardDescription>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Cover Letter
+                </p>
+                <ScrollArea className="h-40 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+                  <p className="whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
+                    {existingApp.formData?.coverLetter || "No cover letter provided."}
+                  </p>
                 </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
-          <>
-            <Label>Personal Information</Label>
-            <div className="flex items-center gap-2">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-sm text-slate-700 dark:text-slate-300">
+                  First Name
+                </Label>
+                <Input
+                  type="text"
+                  defaultValue={session.data?.user.firstname || ""}
+                  disabled
+                  className="bg-slate-50 dark:bg-slate-900/60"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm text-slate-700 dark:text-slate-300">
+                  Last Name
+                </Label>
+                <Input
+                  type="text"
+                  defaultValue={session.data?.user.lastname || ""}
+                  disabled
+                  className="bg-slate-50 dark:bg-slate-900/60"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-slate-700 dark:text-slate-300">
+                Email
+              </Label>
               <Input
-                type="text"
-                defaultValue={session.data?.user.firstname}
+                type="email"
+                defaultValue={session.data?.user.email || ""}
                 disabled
-              />
-              <Input
-                type="text"
-                defaultValue={session.data?.user.lastname}
-                disabled
+                className="bg-slate-50 dark:bg-slate-900/60"
               />
             </div>
-            <Input
-              type="email"
-              defaultValue={session.data?.user.email || ""}
-              disabled
-            />
 
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-              <Label htmlFor="coverLetter">Cover Letter</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="coverLetter"
+                className="text-sm text-slate-700 dark:text-slate-300"
+              >
+                Cover Letter
+              </Label>
+
               <Controller
                 name="coverLetter"
                 control={form.control}
@@ -214,44 +303,48 @@ export default function ApplyJobDialog({
                   <InputGroup>
                     <InputGroupTextarea
                       id="coverLetter"
-                      placeholder="Add a short note to stand out — share your skills, experience, or motivation for applying."
+                      placeholder="Write a short message about why you're a good fit..."
                       value={field.value}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
-                      className="min-h-80"
+                      className="min-h-40 rounded-md border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                     />
                     <InputGroupAddon align="block-end">
-                      <div className="flex w-full items-center justify-end gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          {field.value.length}/2000
+                      <div className="flex w-full items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {coverLetterValue.length}/2000
                         </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => onOpenChange(false)}
-                          disabled={submitting}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="submit"
-                          className="bg-lime-500 text-white"
-                          disabled={submitting}
-                        >
-                          {submitting ? "Submitting" : "Submit Application"}
-                        </Button>
+
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => onOpenChange(false)}
+                            disabled={submitting}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            className="bg-lime-500 text-white hover:bg-lime-600"
+                            disabled={submitting}
+                          >
+                            {submitting ? "Submitting..." : "Submit"}
+                          </Button>
+                        </div>
                       </div>
                     </InputGroupAddon>
                   </InputGroup>
                 )}
               />
+
               {form.formState.errors.coverLetter && (
-                <p className="text-xs text-red-400">
+                <p className="text-xs text-red-500 dark:text-red-400">
                   {form.formState.errors.coverLetter.message}
                 </p>
               )}
-            </form>
-          </>
+            </div>
+          </form>
         )}
       </DialogContent>
     </Dialog>
