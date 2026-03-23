@@ -2,7 +2,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return new Response("Unauthorized", { status: 401 });
@@ -10,7 +10,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const user = await prisma.user.findUnique({ where: { email: session.user.email } });
     if (!user) return new Response("User not found", { status: 404 });
 
-    const notifId = params.id;
+    const { id } = await params;
+    const notifId = id;
 
     // Mark notification as read
     const updated = await prisma.notification.updateMany({

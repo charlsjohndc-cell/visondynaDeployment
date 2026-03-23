@@ -21,7 +21,7 @@ const updateAdminUserSchema = z.object({
 });
 
 type RouteParams = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       return badRequest("Unauthorized");
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const body = (await req.json()) as unknown;
     const parsed = updateAdminUserSchema.safeParse(body);
@@ -100,7 +100,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
       return badRequest("Unauthorized");
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const deleted = await prisma.user.update({
       where: { id },

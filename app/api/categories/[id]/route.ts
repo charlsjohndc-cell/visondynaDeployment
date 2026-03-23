@@ -4,12 +4,13 @@ import { ok, notFound, badRequest, conflict, serverError } from "@/lib/http";
 import { updateCategorySchema } from "@/lib/schemas/categories";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const category = await prisma.category.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         name: true,
@@ -26,6 +27,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const json = await req.json();
     const parsed = updateCategorySchema.safeParse(json);
     if (!parsed.success) {
@@ -33,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const updated = await prisma.category.update({
-      where: { id: params.id },
+      where: { id },
       data: { name: parsed.data.name.trim() },
       select: { id: true, name: true },
     });
@@ -50,13 +52,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const usage = await prisma.job.count({ where: { categoryId: params.id } });
+    const { id } = await params;
+    const usage = await prisma.job.count({ where: { categoryId: id } });
     if (usage > 0) {
       return badRequest("Cannot delete a category that is in use by jobs.");
     }
 
-    await prisma.category.delete({ where: { id: params.id } });
-    return ok({ id: params.id });
+    await prisma.category.delete({ where: { id } });
+    return ok({ id });
   } catch (err: unknown) {
     if (err instanceof PrismaClientKnownRequestError) {
       if (err.code === "P2025") return notFound("Category not found");

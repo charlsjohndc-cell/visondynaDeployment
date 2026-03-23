@@ -9,7 +9,7 @@ type ApiMessageCreate = { content?: string };
 
 // GET: list messages for conversation :id
 // POST: append a message to conversation :id
-export async function GET(_req: NextRequest, context: { params: { id: string } | Promise<{ id: string }> }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     // unwrap params
     const resolvedParams = await context.params;
@@ -47,7 +47,7 @@ export async function GET(_req: NextRequest, context: { params: { id: string } |
   }
 }
 
-export async function POST(req: NextRequest, context: { params: { id: string } | Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const resolvedParams = await context.params;
     const id = resolvedParams.id;

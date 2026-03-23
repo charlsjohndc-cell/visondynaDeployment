@@ -5,13 +5,14 @@ import { authOptions } from "@/lib/auth";
 import { getProfileIdOrFail } from "@/lib/auth/profile";
 
 type SessionUser = { id?: string; role?: "ADMIN" | "APPLICANT" | string };
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /**
  * POST: mark messages not sent by requester as read
  */
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id)
       return NextResponse.json(
@@ -20,7 +21,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       );
 
     const convo = await prisma.conversation.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
     if (!convo)
       return NextResponse.json(
@@ -41,7 +42,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const requesterRole = role === "ADMIN" ? "ADMIN" : "APPLICANT";
     const updated = await prisma.message.updateMany({
       where: {
-        conversationId: params.id,
+        conversationId: id,
         senderRole: { not: requesterRole },
         readAt: null,
       },

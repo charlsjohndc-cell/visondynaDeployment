@@ -12,10 +12,11 @@ const updateSchema = z.object({
   graduationDate: zDateISO.optional(),
 });
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const profileId = await getProfileIdOrFail();
     if (!profileId)
       return NextResponse.json(
@@ -36,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       parsed.data;
 
     const updated = await prisma.education.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(course !== undefined ? { course } : {}),
         ...(institution !== undefined ? { institution } : {}),
@@ -58,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const profileId = await getProfileIdOrFail();
     if (!profileId)
       return NextResponse.json(
@@ -65,7 +67,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
         { status: 401 },
       );
 
-    await prisma.education.delete({ where: { id: params.id } });
+    await prisma.education.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);

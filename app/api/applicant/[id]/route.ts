@@ -2,11 +2,11 @@ import { NextRequest } from "next/server";
 import { ok, notFound, badRequest, serverError } from "@/lib/http";
 import prisma from "@/lib/prisma";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    const id = params?.id;
+    const id = (await params)?.id;
 
     if (!id) {
       return badRequest("Missing applicant id.");
