@@ -1,277 +1,139 @@
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
-import {
-  ok,
-  created,
-  badRequest,
-  conflict,
-  serverError,
-  readPaginationParams,
-} from "@/lib/http";
-import { createJobSchema } from "@/lib/schemas/jobs";
-import { Prisma } from "@prisma/client";
-import type { JobStatus } from "@prisma/client";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { badRequest, notFound, ok, serverError } from "@/lib/http";
+import { updateJobSchema } from "@/lib/schemas/jobs";
+import type { Prisma } from "@prisma/client";
 
-// --- helpers ---
-function buildJobWhere(
-  q?: string | null,
-  categoryId?: string | null,
-  status?: JobStatus
-) {
-  const where: Record<string, unknown> = { deletedAt: null };
+const jobDetailsSelect = {
+  id: true,
+  title: true,
+  description: true,
+  manpower: true,
+  salary: true,
+  company: true,
+  location: true,
+  status: true,
+  createdAt: true,
+  categoryId: true,
+  category: { select: { id: true, name: true } },
+  skills: {
+    select: {
+      skillTag: {
+        select: { id: true, name: true },
+      },
+    },
+  },
+  applications: {
+    where: { deletedAt: null },
+    orderBy: { submittedAt: "desc" as const },
+    select: {
+      id: true,
+      applicantId: true,
+      status: true,
+      submittedAt: true,
+      formData: true,
+      applicant: {
+        select: {
+          firstname: true,
+          lastname: true,
+          email: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.JobSelect;
 
-  if (categoryId?.trim()) where.categoryId = categoryId.trim();
-  if (status) where.status = status;
+type JobDetailsRecord = Prisma.JobGetPayload<{
+  select: typeof jobDetailsSelect;
+}>;
 
-  if (q?.trim()) {
-    const searchConditions = [
-      { title: { contains: q.trim(), mode: "insensitive" as const } },
-      { description: { contains: q.trim(), mode: "insensitive" as const } },
-      { company: { contains: q.trim(), mode: "insensitive" as const } },
-      { location: { contains: q.trim(), mode: "insensitive" as const } },
-    ];
-    Object.assign(where, { OR: searchConditions });
-  }
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
 
-  return where;
+function formatApplicantName(firstname: string, lastname: string, email: string) {
+  const fullName = `${firstname} ${lastname}`.trim();
+  return fullName || email || "Applicant";
 }
 
-const SORTABLE = ["title", "salary", "manpower", "applications", "createdAt"] as const;
-type SortBy = (typeof SORTABLE)[number];
-type SortDir = "asc" | "desc";
-
-function readSort(url: URL | { searchParams: URLSearchParams }) {
-  const rawBy = (url.searchParams.get("sortBy") || "createdAt") as string;
-  const sortBy: SortBy = SORTABLE.includes(rawBy as SortBy)
-    ? (rawBy as SortBy)
-    : "createdAt";
-
-  let sortDir: SortDir = (url.searchParams.get("sortDir") as SortDir) || "desc";
-  if (sortDir !== "asc" && sortDir !== "desc") sortDir = "desc";
-  if (!url.searchParams.has("sortDir") && sortBy !== "createdAt") sortDir = "asc";
-
-  return { sortBy, sortDir };
+function serializeJob(job: JobDetailsRecord) {
+  return {
+    id: job.id,
+    title: job.title,
+    description: job.description,
+    manpower: job.manpower,
+    salary: job.salary,
+    company: job.company,
+    location: job.location,
+    status: job.status,
+    createdAt: job.createdAt.toISOString(),
+    category: job.category,
+    skills: job.skills.map((entry) => entry.skillTag),
+    applications: job.applications.map((application) => ({
+      id: application.id,
+      applicantId: application.applicantId,
+      name: formatApplicantName(
+        application.applicant.firstname,
+        application.applicant.lastname,
+        application.applicant.email,
+      ),
+      email: application.applicant.email,
+      formData: application.formData,
+      status: application.status,
+      submittedAt: application.submittedAt.toISOString(),
+    })),
+  };
 }
 
-function readOffsetParams(url: URL | { searchParams: URLSearchParams }) {
-  const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? 10)));
-  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
-  const skip = (page - 1) * limit;
-  return { limit, page, skip };
-}
-
-// --- API Handlers ---
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest, context: RouteContext) {
   try {
-    const url = req.nextUrl;
-    const q = url.searchParams.get("q") || undefined;
-    const categoryId = url.searchParams.get("categoryId") || undefined;
-    const statusParam = url.searchParams.get("status");
-    const status: JobStatus | undefined =
-      statusParam === "OPEN" || statusParam === "CLOSED" || statusParam === "FILLED"
-        ? (statusParam as JobStatus)
-        : undefined;
+    const { id } = await context.params;
+    if (!id) return badRequest("Missing job ID");
 
-    const { sortBy, sortDir } = readSort(url);
-    const where = buildJobWhere(q, categoryId, status);
-
-    // --- cursor pagination for createdAt ---
-    if (sortBy === "createdAt") {
-      const { limit, cursor } = readPaginationParams(url);
-
-      let items = await prisma.job.findMany({
-        where,
-        take: limit + 1,
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        orderBy: [{ createdAt: sortDir }, { id: sortDir }],
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          manpower: true,
-          salary: true,
-          company: true,
-          location: true,
-          status: true,
-          createdAt: true,
-          categoryId: true,
-          category: { select: { id: true, name: true } },
-          skills: {
-            select: {
-              skillTag: {
-                select: { id: true, name: true },
-              },
-            },
-          },
-          _count: { select: { applications: true } },
-        },
-      });
-
-      let nextCursor: string | null = null;
-
-      if (items.length > limit) {
-        nextCursor = items[limit].id;
-        items = items.slice(0, limit);
-      }
-
-      return ok(items, {
-        nextCursor,
-        limit,
-        sortBy,
-        sortDir,
-        paging: { mode: "cursor", nextCursor },
-      });
-    }
-
-    // --- offset pagination for other sorts ---
-    const { limit, page, skip } = readOffsetParams(url);
-
-    const orderByClause: Prisma.JobOrderByWithRelationInput[] =
-      sortBy === "applications"
-        ? [{ applications: { _count: sortDir } }, { id: "asc" }]
-        : [{ [sortBy]: sortDir } as Prisma.JobOrderByWithRelationInput, { id: "asc" }];
-
-    const [items, total] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        take: limit,
-        skip,
-        orderBy: orderByClause,
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          manpower: true,
-          salary: true,
-          company: true,
-          location: true,
-          status: true,
-          createdAt: true,
-          categoryId: true,
-          category: { select: { id: true, name: true } },
-          _count: { select: { applications: true } },
-        },
-      }),
-      prisma.job.count({ where }),
-    ]);
-
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    const hasMore = page < totalPages;
-
-    return ok(items, {
-      nextCursor: null,
-      limit,
-      sortBy,
-      sortDir,
-      paging: { mode: "offset", page, total, totalPages, hasMore },
+    const job = await prisma.job.findUnique({
+      where: { id },
+      select: jobDetailsSelect,
     });
-  } catch (err: unknown) {
+
+    if (!job) return notFound("Job not found");
+
+    return ok(serializeJob(job));
+  } catch (err) {
     return serverError(err);
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
+    const { id } = await context.params;
+    if (!id) return badRequest("Missing job ID");
 
-    if (!userId) return badRequest("Unauthorized");
+    const existing = await prisma.job.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existing) return notFound("Job not found");
 
     const body = await req.json();
-    const parsed = createJobSchema.safeParse(body);
+    const parsed = updateJobSchema.safeParse(body);
 
     if (!parsed.success) {
       return badRequest("Invalid job payload", parsed.error.flatten());
     }
 
-    const skills: string[] | undefined = Array.isArray(body.skills) ? body.skills : undefined;
-
-    const category = await prisma.category.findUnique({
-      where: { id: parsed.data.categoryId },
-      select: { id: true },
-    });
-
-    if (!category) return badRequest("Invalid categoryId");
-
-    const result = await prisma.$transaction(async (tx) => {
-      const job = await tx.job.create({
-        data: {
-          ...parsed.data,
-          postedById: userId,
-        },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          manpower: true,
-          salary: true,
-          company: true,
-          location: true,
-          status: true,
-          createdAt: true,
-          categoryId: true,
-        },
-      });
-
-      if (skills && skills.length > 0) {
-        const validSkills = await tx.skillTag.findMany({
-          where: { id: { in: skills } },
-          select: { id: true },
-        });
-
-        if (validSkills.length !== skills.length) {
-          throw new Error("Invalid skill ids");
-        }
-
-        await tx.jobSkillTag.createMany({
-          data: validSkills.map((skill) => ({
-            jobId: job.id,
-            skillTagId: skill.id,
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      const applicants = await tx.user.findMany({
-        where: {
-          role: "APPLICANT",
-          deletedAt: null,
-          isSuspended: false,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (applicants.length > 0) {
-        await tx.notification.createMany({
-          data: applicants.map((applicant) => ({
-            userId: applicant.id,
-            message: `New job posted: ${job.title}`,
-            type: "Job",
-            status: "Open for applications",
-            company: job.company,
-            jobTitle: job.title,
-            location: job.location,
-            isRead: false,
-          })),
-        });
-      }
-
-      return job;
-    });
-
-    return created(result);
-  } catch (err: unknown) {
-    if (err instanceof PrismaClientKnownRequestError) {
-      if (err.code === "P2002") {
-        return conflict("Unique constraint violation", err.meta);
-      }
+    if (Object.keys(parsed.data).length === 0) {
+      return badRequest("No fields provided to update");
     }
 
+    const updated = await prisma.job.update({
+      where: { id },
+      data: parsed.data,
+      select: jobDetailsSelect,
+    });
+
+    return ok(serializeJob(updated));
+  } catch (err) {
     return serverError(err);
   }
 }
