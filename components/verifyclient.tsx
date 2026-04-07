@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import { Spinner } from "@/components/ui/spinner"; // Import spinner for loading state
 import { Button } from "@/components/ui/button"; // To add a retry button
 import { toast } from "sonner"; // Correctly using toast function from sonner library
@@ -25,8 +26,12 @@ export default function VerifyClient({ token }: { token: string }) {
 
         if (res.ok) {
           setMessage("Your email has been verified. Redirecting to sign-in...");
-          setTimeout(() => router.push("/auth/signin?verified=1"), 2000); // Delay the redirection
-          toast.success("Email verified successfully!"); // Display success toast
+          setTimeout(() => {
+            void (async () => {
+              await signOut({ redirect: false });
+              router.push("/auth/signin?verified=1");
+            })();
+          }, 2000); // Delay the redirection
         } else {
           setMessage(
             "Verification failed. The link may have expired or is invalid.",

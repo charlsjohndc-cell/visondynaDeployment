@@ -10,12 +10,17 @@ function Banner({ title, message }: { title: string; message: string }) {
   );
 }
 
-export default function VerifyEmailPage({
+export default async function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: { token?: string; checkInbox?: string; email?: string };
+  searchParams?: Promise<{
+    token?: string;
+    checkInbox?: string;
+    email?: string;
+  }>;
 }) {
-  const token = searchParams.token;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const token = resolvedSearchParams?.token;
 
   // If a token is present: run verification flow (spinner/success/error inside)
   if (token) {
@@ -23,9 +28,11 @@ export default function VerifyEmailPage({
   }
 
   // Otherwise: show "check your inbox" + optional resend form
-  const checkInbox = searchParams.checkInbox === "1";
+  const checkInbox = resolvedSearchParams?.checkInbox === "1";
   const presetEmail =
-    typeof searchParams.email === "string" ? searchParams.email : "";
+    typeof resolvedSearchParams?.email === "string"
+      ? resolvedSearchParams.email
+      : "";
 
   return (
     <div className="relative flex min-h-[60vh] items-center justify-center px-4">

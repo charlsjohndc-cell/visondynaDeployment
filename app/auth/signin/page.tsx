@@ -8,10 +8,18 @@ export const metadata: Metadata = {
   title: "Visondyna / Sign In",
   description: "",
 };
-export default async function SignIn() {
+export default async function SignIn({
+  searchParams,
+}: {
+  searchParams?: Promise<{ verified?: string }>;
+}) {
+  const resolvedSearchParams = searchParams
+    ? await searchParams
+    : undefined;
   const session = await getServerSession(authOptions);
+  const hasVerifiedFlag = resolvedSearchParams?.verified === "1";
 
-  if (session) {
+  if (session && !hasVerifiedFlag) {
     const role = session?.user.role;
 
     const url = {
@@ -20,7 +28,7 @@ export default async function SignIn() {
       APPLICANT: "/feed",
     };
 
-    redirect(url[role]);
+    redirect(url[role] ?? "/feed");
   }
 
   return <SignInForm />;

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { signIn, getSession, type SignInResponse } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
   Form,
@@ -36,6 +36,21 @@ export default function SignInForm() {
   const router = useRouter();
 
   const callbackUrlParam = searchParams?.get("callbackUrl") ?? null;
+  const verifiedParam = searchParams?.get("verified") ?? null;
+
+  useEffect(() => {
+    if (verifiedParam !== "1") return;
+
+    toast.success("Email verified successfully. Please sign in.", {
+      id: "email-verified-signin",
+    });
+
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("verified");
+    const nextQuery = params.toString();
+
+    router.replace(nextQuery ? `/auth/signin?${nextQuery}` : "/auth/signin");
+  }, [verifiedParam, searchParams, router]);
 
   const form = useForm<FormSchema>({
     resolver: zodResolver(formSchema),
