@@ -93,7 +93,10 @@ export default async function Feed() {
     ? `${currentUser.firstname} ${currentUser.lastname}`
     : session?.user?.name || "User";
 
-  const avatarSrc = currentUser?.applicantInfo?.imageUrl || fallbackAvatar;
+  const avatarSrc =
+    currentUser?.applicantInfo?.imageUrl ||
+    session?.user?.image ||
+    fallbackAvatar;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl gap-6 px-4 py-6">

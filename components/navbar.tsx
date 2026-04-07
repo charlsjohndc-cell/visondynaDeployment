@@ -60,7 +60,7 @@ export default function Navbar() {
     [user?.firstname, user?.lastname].filter(Boolean).join(" ") ||
     "User";
 
-  const avatarSrc = profileImage || fallbackAvatar;
+  const avatarSrc = profileImage || user?.image || fallbackAvatar;
 
   const links = React.useMemo(
     () => [
